@@ -84,6 +84,54 @@ classdef TestTask1Contracts < matlab.unittest.TestCase
                 'uav:config:InrLengthMismatch');
         end
 
+        function validationSupportsZeroInterferers(testCase)
+            cfg = config('smoke');
+            cfg.sources.interfererAzElDeg = zeros(0, 2);
+            cfg.sources.interfererInrDb = [];
+
+            validated = uav.config.validate(cfg);
+
+            testCase.verifyEqual(validated.derived.J, 0);
+            testCase.verifyEqual(validated.derived.interfererPowers, zeros(1, 0));
+            testCase.verifySize(validated.derived.nominalSteering, [9, 1]);
+            testCase.verifySize(validated.derived.nominalSteeringReference, [9, 1]);
+        end
+
+        function validationRejectsInvalidAlgorithmParameters(testCase)
+            invalidCases = { ...
+                'spectrum', 'desiredExclusionHalfWidthDeg', NaN; ...
+                'spectrum', 'desiredExclusionHalfWidthDeg', -1; ...
+                'spectrum', 'diagonalLoading', -1; ...
+                'incm', 'shrinkage', 1.01; ...
+                'incm', 'eigenvalueFloorRatio', 0; ...
+                'incm', 'lambdaS', -1; ...
+                'incm', 'lambdaT', -Inf; ...
+                'beamforming', 'diagonalLoading', NaN; ...
+                'beamforming', 'epsilonS', -1};
+
+            for index = 1:size(invalidCases, 1)
+                cfg = config('smoke');
+                section = invalidCases{index, 1};
+                field = invalidCases{index, 2};
+                cfg.(section).(field) = invalidCases{index, 3};
+                testCase.verifyError(@() uav.config.validate(cfg), ...
+                    'uav:config:InvalidAlgorithmParameter');
+            end
+        end
+
+        function validationDerivesRectangularArraySteering(testCase)
+            cfg = config('smoke');
+            cfg.array.Nx = 2;
+            cfg.array.Ny = 4;
+
+            validated = uav.config.validate(cfg);
+
+            testCase.verifyEqual(validated.derived.M, 8);
+            testCase.verifySize(validated.derived.nominalSteering, ...
+                [8, validated.derived.J + 1]);
+            testCase.verifySize(validated.derived.nominalSteeringReference, [8, 1]);
+        end
+
         function makeStreamIsDeterministicAndDoesNotChangeGlobalRng(testCase)
             streamA = uav.util.makeStream(42, 7);
             streamB = uav.util.makeStream(42, 7);

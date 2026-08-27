@@ -35,6 +35,7 @@ end
 validatePositiveInteger(cfg.random.baseSeed, 'random.baseSeed');
 validatePositiveInteger(cfg.monteCarlo.nTrials, 'monteCarlo.nTrials');
 validatePositiveInteger(cfg.spectrum.gridSize, 'spectrum.gridSize');
+validateAlgorithmParameters(cfg);
 validateFiniteScalar(cfg.signal.snrDb, 'signal.snrDb');
 validateFiniteScalar(cfg.signal.noisePower, 'signal.noisePower');
 if cfg.signal.noisePower <= 0
@@ -58,9 +59,14 @@ if size(cfg.sources.interfererAzElDeg, 2) ~= 2
         'Interferer directions must have two columns: azimuth and elevation.');
 end
 validateDirections(cfg.sources.interfererAzElDeg, 'interferer');
-validateFiniteVector(cfg.sources.interfererInrDb, [], 'sources.interfererInrDb');
 
 J = size(cfg.sources.interfererAzElDeg, 1);
+if J == 0 && isempty(cfg.sources.interfererInrDb)
+    cfg.sources.interfererInrDb = zeros(1, 0);
+else
+    validateFiniteVector(cfg.sources.interfererInrDb, [], 'sources.interfererInrDb');
+    cfg.sources.interfererInrDb = reshape(cfg.sources.interfererInrDb, 1, []);
+end
 if numel(cfg.sources.interfererInrDb) ~= J
     error('uav:config:InrLengthMismatch', ...
         'The number of interferer INR values must equal the number of interferer directions.');
@@ -116,6 +122,54 @@ function validateFiniteVector(value, expectedLength, name)
 if ~isvector(value) || ~isnumeric(value) || any(~isfinite(value)) || ...
         (~isempty(expectedLength) && numel(value) ~= expectedLength)
     error('uav:config:InvalidVector', '%s must be a finite vector of the required length.', name);
+end
+end
+
+function validateAlgorithmParameters(cfg)
+validateAlgorithmFiniteScalar(cfg.spectrum.desiredExclusionHalfWidthDeg, ...
+    'spectrum.desiredExclusionHalfWidthDeg');
+if cfg.spectrum.desiredExclusionHalfWidthDeg < 0 || ...
+        cfg.spectrum.desiredExclusionHalfWidthDeg >= 90
+    error('uav:config:InvalidAlgorithmParameter', ...
+        'The desired exclusion half width must lie in [0, 90) degrees.');
+end
+validateNonnegativeFiniteScalar(cfg.spectrum.diagonalLoading, 'spectrum.diagonalLoading');
+validateAlgorithmFiniteScalar(cfg.incm.shrinkage, 'incm.shrinkage');
+if cfg.incm.shrinkage < 0 || cfg.incm.shrinkage > 1
+    error('uav:config:InvalidAlgorithmParameter', ...
+        'incm.shrinkage must lie in [0, 1].');
+end
+validatePositiveFiniteScalar(cfg.incm.eigenvalueFloorRatio, ...
+    'incm.eigenvalueFloorRatio');
+if cfg.incm.eigenvalueFloorRatio > 1
+    error('uav:config:InvalidAlgorithmParameter', ...
+        'incm.eigenvalueFloorRatio must not exceed one.');
+end
+validateNonnegativeFiniteScalar(cfg.incm.lambdaS, 'incm.lambdaS');
+validateNonnegativeFiniteScalar(cfg.incm.lambdaT, 'incm.lambdaT');
+validateNonnegativeFiniteScalar(cfg.beamforming.diagonalLoading, ...
+    'beamforming.diagonalLoading');
+validateNonnegativeFiniteScalar(cfg.beamforming.epsilonS, 'beamforming.epsilonS');
+end
+
+function validateNonnegativeFiniteScalar(value, name)
+validateAlgorithmFiniteScalar(value, name);
+if value < 0
+    error('uav:config:InvalidAlgorithmParameter', '%s must be nonnegative.', name);
+end
+end
+
+function validatePositiveFiniteScalar(value, name)
+validateAlgorithmFiniteScalar(value, name);
+if value <= 0
+    error('uav:config:InvalidAlgorithmParameter', '%s must be positive.', name);
+end
+end
+
+function validateAlgorithmFiniteScalar(value, name)
+if ~isscalar(value) || ~isfinite(value)
+    error('uav:config:InvalidAlgorithmParameter', ...
+        '%s must be a finite scalar.', name);
 end
 end
 
