@@ -97,3 +97,63 @@ was discovered without error.
   `cd('D:\workspace\UAVjitter')` before invoking repository scripts.
 - The experiment directory is deliberately empty until Task 5.  This is the
   approved Task 1 boundary, not a failed smoke run.
+
+---
+
+## Review-fix evidence — 2026-08-27
+
+### Modification summary
+
+- Normalized the zero-interferer INR vector to a `1x0` row and explicitly
+  allowed `J = 0` only when its INR vector is empty.  Finite INR validation and
+  length matching remain in force for `J > 0`.
+- Added finite/domain validation for every numeric spectrum, INCM, and
+  beamforming parameter defined in `config.m`: exclusion width `[0,90)`,
+  nonnegative loading/regularization/uncertainty, shrinkage `[0,1]`, and
+  eigenvalue-floor ratio `(0,1]`.
+- Added regressions for `J = 0`, invalid algorithm parameters, and a `2x4`
+  rectangular UPA (`M = 8`, steering `[8,J+1]`, desired reference `[8,1]`).
+
+### RED
+
+```powershell
+& 'D:\MATLAB\bin\matlab.exe' -batch "cd('D:\workspace\UAVjitter'); r=runtests('tests/TestTask1Contracts.m'); disp(r); assertSuccess(r)"
+```
+
+Result: exit code 1; `8 Passed, 2 Failed, 1 Incomplete` out of 10 tests.
+`validationSupportsZeroInterferers` failed with
+`uav:config:InvalidVector` because MATLAB reports `isvector([])` as false;
+the invalid-algorithm-parameter test failed because validation accepted all
+nine invalid spectrum/INCM/beamforming values.  The new rectangular-array
+contract already passed against the existing general steering derivation.
+
+### GREEN
+
+Focused command (same as RED): exit code 0; `10 Passed, 0 Failed, 0
+Incomplete`.
+
+Full-suite command:
+
+```powershell
+& 'D:\MATLAB\bin\matlab.exe' -batch "cd('D:\workspace\UAVjitter'); startup; r=runtests('tests','IncludeSubfolders',true); assertSuccess(r)"
+```
+
+Result: exit code 0; `10 Passed, 0 Failed, 0 Incomplete`.
+
+Smoke-orchestrator command:
+
+```powershell
+& 'D:\MATLAB\bin\matlab.exe' -batch "cd('D:\workspace\UAVjitter'); startup; result=run_all('smoke'); assert(isempty(result.experiments))"
+```
+
+Result: exit code 0; all 10 tests passed and the approved empty experiment set
+was discovered.
+
+### Fix commit
+
+`354ed0f fix: validate zero-interferer configuration`
+
+### Remaining concern
+
+The Task 1 experiment directory remains intentionally empty until Task 5; the
+current smoke run verifies orchestration rather than five-experiment output.
