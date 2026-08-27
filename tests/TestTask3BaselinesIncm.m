@@ -14,6 +14,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
 
             testCase.verifyEqual(cfg.spectrum.noiseEigenvalueFraction, 0.5);
             testCase.verifyEqual(cfg.incm.noiseFloorRatio, 1e-6);
+            testCase.verifyEqual(cfg.beamforming.minimumReciprocalCondition, 1e-8);
         end
 
         function validationRejectsInvalidStaticIncmNumericalParameters(testCase)
@@ -26,6 +27,21 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             cfg.incm.noiseFloorRatio = -1;
             testCase.verifyError(@() uav.config.validate(cfg), ...
                 'uav:config:InvalidAlgorithmParameter');
+
+            cfg = config('smoke');
+            cfg.beamforming.minimumReciprocalCondition = 1;
+            testCase.verifyError(@() uav.config.validate(cfg), ...
+                'uav:config:InvalidAlgorithmParameter');
+        end
+
+        function validationRequiresOddCaponGridOfAtLeastThree(testCase)
+            invalidGridSizes = [1, 2, 20];
+            for gridSize = invalidGridSizes
+                cfg = config('smoke');
+                cfg.spectrum.gridSize = gridSize;
+                testCase.verifyError(@() uav.config.validate(cfg), ...
+                    'uav:config:InvalidPositiveInteger');
+            end
         end
 
         function mvdrHasClosedFormDistortionlessResponse(testCase)
@@ -50,6 +66,26 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(w)));
             testCase.verifyEqual(w' * aRef, 1, 'AbsTol', 1e-12);
             testCase.verifyGreaterThan(diagnostics.loading, 0);
+        end
+
+        function mvdrNumericallyLoadsUnderdeterminedScmWithoutWarning(testCase)
+            cfg = config('smoke');
+            cfg.timeline.L = 3;
+            cfg = uav.config.validate(cfg);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(53, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(53, 2));
+            aRef = cfg.derived.nominalSteeringReference;
+
+            testCase.verifyWarningFree(@() uav.beamforming.solve("mvdr", obs.Rx, aRef, cfg));
+            [w, diagnostics] = uav.beamforming.solve("mvdr", obs.Rx, aRef, cfg);
+
+            testCase.verifyLessThan(cfg.timeline.L, cfg.derived.M);
+            testCase.verifyGreaterThan(diagnostics.loading, 0);
+            testCase.verifyGreaterThanOrEqual(diagnostics.reciprocalCondition, ...
+                cfg.beamforming.minimumReciprocalCondition * (1 - 1e-8));
+            testCase.verifyTrue(all(isfinite(w)));
+            testCase.verifyLessThan(norm(w), 1 / sqrt(eps));
+            testCase.verifyEqual(w' * aRef, 1, 'AbsTol', 1e-12);
         end
 
         function metricsUsesLinearSinrAlgebraAndHandlesZeroInterferers(testCase)
@@ -181,6 +217,54 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 testCase.verifyTrue(all(isfinite(RinHat), 'all'));
                 testCase.verifyEqual(state.method, "static");
             end
+        end
+
+        function rankAwareNoiseEstimateCorrectsUnderdeterminedNoiseOnlyScm(testCase)
+            cfg = config('smoke');
+            cfg.timeline.L = 3;
+            cfg.sources.interfererAzElDeg = zeros(0, 2);
+            cfg.sources.interfererInrDb = [];
+            cfg = uav.config.validate(cfg);
+            X = sqrt(cfg.derived.M * cfg.derived.noisePower) * ...
+                [eye(cfg.timeline.L); zeros(cfg.derived.M - cfg.timeline.L, cfg.timeline.L)];
+            obs = struct('Rx', X * X' / cfg.timeline.L, 'X', X);
+
+            [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+
+            testCase.verifyEqual(diagnostics.noiseEstimate, cfg.derived.noisePower, ...
+                'AbsTol', 1e-12);
+            testCase.verifyGreaterThan(diagnostics.noiseEstimate, diagnostics.noiseFloor);
+            testCase.verifyEqual(diagnostics.effectiveSnapshotCount, cfg.timeline.L);
+        end
+
+        function rankAwareNoiseEstimateDoesNotCollapseToFloorWithInterference(testCase)
+            cfg = config('smoke');
+            cfg.timeline.L = 3;
+            cfg = uav.config.validate(cfg);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(73, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(73, 2));
+
+            [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+
+            testCase.verifyGreaterThan(diagnostics.noiseEstimate, diagnostics.noiseFloor);
+        end
+
+        function staticIncmSubtractsCaponNoisePedestalForExactNoiseCovariance(testCase)
+            cfg = config('smoke');
+            cfg.sources.interfererAzElDeg = zeros(0, 2);
+            cfg.sources.interfererInrDb = [];
+            cfg = uav.config.validate(cfg);
+            noiseOnlyObservation = struct('Rx', cfg.derived.noisePower * eye(cfg.derived.M));
+
+            [RinHat, ~, diagnostics] = uav.incm.reconstruct("static", ...
+                noiseOnlyObservation, [], cfg);
+
+            testCase.verifyEqual(RinHat, cfg.derived.noisePower * eye(cfg.derived.M), ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(diagnostics.residualPowerMap(diagnostics.spectrum.visibleMask), ...
+                zeros(nnz(diagnostics.spectrum.visibleMask), 1), 'AbsTol', 1e-12);
+            testCase.verifyEqual(RinHat - diag(diag(RinHat)), zeros(cfg.derived.M), ...
+                'AbsTol', 1e-12);
         end
 
         function staticIncmDoesNotReadRemovedOrPoisonedTruth(testCase)

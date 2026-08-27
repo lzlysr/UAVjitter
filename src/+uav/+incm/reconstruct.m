@@ -12,25 +12,36 @@ priorState = priorState; %#ok<NASGU>
 [powerMap, spectrumDiagnostics] = uav.spectrum.loadedCapon(obs.Rx, cfg);
 includedMask = nonSoiVisibleMask(spectrumDiagnostics, cfg);
 M = cfg.derived.M;
+[noiseEstimate, noiseDiagnostics] = estimateNoisePower(obs, cfg);
+pedestalPower = (noiseEstimate + spectrumDiagnostics.loading) / M;
+residualPowerMap = powerMap;
+residualPowerMap(spectrumDiagnostics.visibleMask) = max( ...
+    powerMap(spectrumDiagnostics.visibleMask) - pedestalPower, 0);
 signalCovariance = zeros(M);
 for linearIndex = find(includedMask).'
     a = uav.array.steeringUPA([spectrumDiagnostics.xiX(linearIndex); ...
         spectrumDiagnostics.xiY(linearIndex)], cfg.array.Nx, cfg.array.Ny, ...
         cfg.array.spacingOverLambda);
     signalCovariance = signalCovariance + spectrumDiagnostics.cellArea * ...
-        powerMap(linearIndex) * (a * a');
+        residualPowerMap(linearIndex) * (a * a');
 end
 
-noiseEstimate = estimateNoisePower(obs.Rx, cfg);
 rawIncm = signalCovariance + noiseEstimate * eye(M);
 [RinHat, eigenvalueFloor] = enforceStructure(rawIncm, cfg);
 nextState = struct('method', "static");
 diagnostics = struct( ...
+    'rawPowerMap', powerMap, ...
+    'residualPowerMap', residualPowerMap, ...
+    'usedPowerMap', residualPowerMap, ...
     'powerMap', powerMap, ...
     'spectrum', spectrumDiagnostics, ...
     'includedMask', includedMask, ...
     'excludedSoiMask', spectrumDiagnostics.visibleMask & ~includedMask, ...
     'noiseEstimate', noiseEstimate, ...
+    'noiseFloor', noiseDiagnostics.noiseFloor, ...
+    'effectiveSnapshotCount', noiseDiagnostics.effectiveSnapshotCount, ...
+    'effectiveRank', noiseDiagnostics.effectiveRank, ...
+    'pedestalPower', pedestalPower, ...
     'eigenvalueFloor', eigenvalueFloor);
 end
 
@@ -61,13 +72,37 @@ isSoi = angularDistance <= deg2rad(cfg.spectrum.desiredExclusionHalfWidthDeg);
 includedMask = spectrumDiagnostics.visibleMask & ~isSoi;
 end
 
-function noiseEstimate = estimateNoisePower(Rx, cfg)
+function [noiseEstimate, diagnostics] = estimateNoisePower(obs, cfg)
+Rx = obs.Rx;
 eigenvalues = sort(real(eig((Rx + Rx') / 2)), 'ascend');
 M = numel(eigenvalues);
-lowerCount = max(1, ceil(cfg.spectrum.noiseEigenvalueFraction * M));
-lowerEstimate = median(eigenvalues(1:lowerCount));
+snapshotCount = configuredSnapshotCount(obs, cfg);
+zeroTolerance = eps(max(1, max(abs(eigenvalues)))) * max(M, snapshotCount);
+nonzeroEigenvalues = eigenvalues(eigenvalues > zeroTolerance);
+if isempty(nonzeroEigenvalues)
+    lowerEstimate = 0;
+else
+    lowerCount = max(1, ceil(cfg.spectrum.noiseEigenvalueFraction * ...
+        numel(nonzeroEigenvalues)));
+    lowerEstimate = median(nonzeroEigenvalues(1:lowerCount));
+end
+if snapshotCount < M && numel(nonzeroEigenvalues) < M
+    lowerEstimate = lowerEstimate * snapshotCount / M;
+end
 covarianceScale = max(real(trace(Rx)) / M, eps);
-noiseEstimate = max(lowerEstimate, cfg.incm.noiseFloorRatio * covarianceScale);
+noiseFloor = cfg.incm.noiseFloorRatio * covarianceScale;
+noiseEstimate = max(lowerEstimate, noiseFloor);
+diagnostics = struct( ...
+    'noiseFloor', noiseFloor, ...
+    'effectiveSnapshotCount', snapshotCount, ...
+    'effectiveRank', numel(nonzeroEigenvalues));
+end
+
+function snapshotCount = configuredSnapshotCount(obs, cfg)
+snapshotCount = cfg.timeline.L;
+if isfield(obs, 'X') && ~isempty(obs.X)
+    snapshotCount = size(obs.X, 2);
+end
 end
 
 function [structured, eigenvalueFloor] = enforceStructure(R, cfg)

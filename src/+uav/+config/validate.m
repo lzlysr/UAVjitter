@@ -35,6 +35,10 @@ end
 validatePositiveInteger(cfg.random.baseSeed, 'random.baseSeed');
 validatePositiveInteger(cfg.monteCarlo.nTrials, 'monteCarlo.nTrials');
 validatePositiveInteger(cfg.spectrum.gridSize, 'spectrum.gridSize');
+if cfg.spectrum.gridSize < 3 || mod(cfg.spectrum.gridSize, 2) == 0
+    error('uav:config:InvalidPositiveInteger', ...
+        'spectrum.gridSize must be an odd integer greater than or equal to three.');
+end
 validateAlgorithmParameters(cfg);
 validateFiniteScalar(cfg.signal.snrDb, 'signal.snrDb');
 validateFiniteScalar(cfg.signal.noisePower, 'signal.noisePower');
@@ -161,6 +165,12 @@ validateNonnegativeFiniteScalar(cfg.incm.lambdaT, 'incm.lambdaT');
 validateNonnegativeFiniteScalar(cfg.beamforming.diagonalLoading, ...
     'beamforming.diagonalLoading');
 validateNonnegativeFiniteScalar(cfg.beamforming.epsilonS, 'beamforming.epsilonS');
+validatePositiveFiniteScalar(cfg.beamforming.minimumReciprocalCondition, ...
+    'beamforming.minimumReciprocalCondition');
+if cfg.beamforming.minimumReciprocalCondition >= 1
+    error('uav:config:InvalidAlgorithmParameter', ...
+        'beamforming.minimumReciprocalCondition must lie in (0, 1).');
+end
 end
 
 function validateNonnegativeFiniteScalar(value, name)
