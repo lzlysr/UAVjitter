@@ -41,6 +41,7 @@ diagnostics = struct( ...
     'noiseFloor', noiseDiagnostics.noiseFloor, ...
     'effectiveSnapshotCount', noiseDiagnostics.effectiveSnapshotCount, ...
     'effectiveRank', noiseDiagnostics.effectiveRank, ...
+    'noiseEstimateSource', noiseDiagnostics.source, ...
     'pedestalPower', pedestalPower, ...
     'eigenvalueFloor', eigenvalueFloor);
 end
@@ -57,6 +58,11 @@ M = cfg.derived.M;
 if ~isequal(size(obs.Rx), [M, M]) || any(~isfinite(obs.Rx), 'all')
     error('uav:incm:InvalidObservation', ...
         'obs.Rx must be finite and match the configured array size.');
+end
+if isfield(obs, 'X') && (~ismatrix(obs.X) || size(obs.X, 1) ~= M || ...
+        size(obs.X, 2) < 1 || any(~isfinite(obs.X), 'all'))
+    error('uav:incm:InvalidObservation', ...
+        'obs.X must be finite, nonempty, and have the configured sensor rows.');
 end
 end
 
@@ -76,32 +82,41 @@ function [noiseEstimate, diagnostics] = estimateNoisePower(obs, cfg)
 Rx = obs.Rx;
 eigenvalues = sort(real(eig((Rx + Rx') / 2)), 'ascend');
 M = numel(eigenvalues);
-snapshotCount = configuredSnapshotCount(obs, cfg);
+covarianceScale = max(real(trace(Rx)) / M, eps);
+noiseFloor = cfg.incm.noiseFloorRatio * covarianceScale;
+[snapshotCount, hasSnapshots] = observedSnapshotCount(obs);
 zeroTolerance = eps(max(1, max(abs(eigenvalues)))) * max(M, snapshotCount);
 nonzeroEigenvalues = eigenvalues(eigenvalues > zeroTolerance);
-if isempty(nonzeroEigenvalues)
+if ~hasSnapshots
+    noiseEstimate = cfg.signal.noisePower;
+    source = "configured-missing-snapshots";
+elseif snapshotCount < M
+    noiseEstimate = cfg.signal.noisePower;
+    source = "configured-underdetermined";
+elseif isempty(nonzeroEigenvalues)
     lowerEstimate = 0;
+    noiseEstimate = max(lowerEstimate, noiseFloor);
+    source = "lower-eigenvalues";
 else
     lowerCount = max(1, ceil(cfg.spectrum.noiseEigenvalueFraction * ...
         numel(nonzeroEigenvalues)));
     lowerEstimate = median(nonzeroEigenvalues(1:lowerCount));
+    noiseEstimate = max(lowerEstimate, noiseFloor);
+    source = "lower-eigenvalues";
 end
-if snapshotCount < M && numel(nonzeroEigenvalues) < M
-    lowerEstimate = lowerEstimate * snapshotCount / M;
-end
-covarianceScale = max(real(trace(Rx)) / M, eps);
-noiseFloor = cfg.incm.noiseFloorRatio * covarianceScale;
-noiseEstimate = max(lowerEstimate, noiseFloor);
 diagnostics = struct( ...
     'noiseFloor', noiseFloor, ...
     'effectiveSnapshotCount', snapshotCount, ...
-    'effectiveRank', numel(nonzeroEigenvalues));
+    'effectiveRank', numel(nonzeroEigenvalues), ...
+    'source', source);
 end
 
-function snapshotCount = configuredSnapshotCount(obs, cfg)
-snapshotCount = cfg.timeline.L;
-if isfield(obs, 'X') && ~isempty(obs.X)
+function [snapshotCount, hasSnapshots] = observedSnapshotCount(obs)
+hasSnapshots = isfield(obs, 'X') && ~isempty(obs.X);
+if hasSnapshots
     snapshotCount = size(obs.X, 2);
+else
+    snapshotCount = 0;
 end
 end
 

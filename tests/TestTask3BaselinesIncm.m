@@ -219,7 +219,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             end
         end
 
-        function rankAwareNoiseEstimateCorrectsUnderdeterminedNoiseOnlyScm(testCase)
+        function underdeterminedNoiseUsesConfiguredPrior(testCase)
             cfg = config('smoke');
             cfg.timeline.L = 3;
             cfg.sources.interfererAzElDeg = zeros(0, 2);
@@ -235,18 +235,52 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 'AbsTol', 1e-12);
             testCase.verifyGreaterThan(diagnostics.noiseEstimate, diagnostics.noiseFloor);
             testCase.verifyEqual(diagnostics.effectiveSnapshotCount, cfg.timeline.L);
+            testCase.verifyEqual(diagnostics.noiseEstimateSource, ...
+                "configured-underdetermined");
         end
 
-        function rankAwareNoiseEstimateDoesNotCollapseToFloorWithInterference(testCase)
+        function underdeterminedStrongInterferenceUsesConfiguredNoisePrior(testCase)
+            for snapshotCount = [2, 4, 8]
+                cfg = config('smoke');
+                cfg.timeline.L = snapshotCount;
+                cfg = uav.config.validate(cfg);
+                scenario = uav.scenario.generate(cfg, uav.util.makeStream(73, snapshotCount));
+                obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
+                    uav.util.makeStream(74, snapshotCount));
+
+                [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+
+                testCase.verifyEqual(diagnostics.noiseEstimate, cfg.derived.noisePower, ...
+                    'AbsTol', 0);
+                testCase.verifyEqual(diagnostics.noiseEstimateSource, ...
+                    "configured-underdetermined");
+            end
+        end
+
+        function fullRankNoiseScmUsesLowerEigenvalueEstimator(testCase)
             cfg = config('smoke');
-            cfg.timeline.L = 3;
+            cfg.timeline.L = 12;
+            cfg.sources.interfererAzElDeg = zeros(0, 2);
+            cfg.sources.interfererInrDb = [];
             cfg = uav.config.validate(cfg);
-            scenario = uav.scenario.generate(cfg, uav.util.makeStream(73, 1));
-            obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(73, 2));
+            X = sqrt(cfg.timeline.L * cfg.derived.noisePower) * ...
+                [eye(cfg.derived.M), zeros(cfg.derived.M, cfg.timeline.L - cfg.derived.M)];
+            obs = struct('Rx', X * X' / cfg.timeline.L, 'X', X);
 
             [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
 
-            testCase.verifyGreaterThan(diagnostics.noiseEstimate, diagnostics.noiseFloor);
+            testCase.verifyEqual(diagnostics.noiseEstimate, cfg.derived.noisePower, ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(diagnostics.noiseEstimateSource, "lower-eigenvalues");
+        end
+
+        function staticIncmRejectsObservationWithMismatchedSnapshotRows(testCase)
+            cfg = config('smoke');
+            obs = struct('Rx', eye(cfg.derived.M), ...
+                'X', zeros(cfg.derived.M - 1, cfg.timeline.L));
+
+            testCase.verifyError(@() uav.incm.reconstruct("static", obs, [], cfg), ...
+                'uav:incm:InvalidObservation');
         end
 
         function staticIncmSubtractsCaponNoisePedestalForExactNoiseCovariance(testCase)
@@ -265,6 +299,8 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 zeros(nnz(diagnostics.spectrum.visibleMask), 1), 'AbsTol', 1e-12);
             testCase.verifyEqual(RinHat - diag(diag(RinHat)), zeros(cfg.derived.M), ...
                 'AbsTol', 1e-12);
+            testCase.verifyEqual(diagnostics.noiseEstimateSource, ...
+                "configured-missing-snapshots");
         end
 
         function staticIncmDoesNotReadRemovedOrPoisonedTruth(testCase)
