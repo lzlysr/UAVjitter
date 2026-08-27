@@ -56,3 +56,28 @@ The AR(1) covariance and SCM convergence checks are deliberately statistical
 and use fixed streams with stated tolerances.  They verify the intended
 distribution and covariance model without making later beamforming or INCM
 design assumptions.
+
+## Review-fix RED/GREEN evidence
+
+The approved `obs = uav.scenario.generatePeriod(...)` interface remains a
+single output: physical truth is intentionally nested under `obs.truth`.
+This review fix does not replace it with a second output.
+
+Added literal nonzero-ZYX, physical-input validation, QPSK independence, and
+derived-noise-statistics checks, then ran:
+
+```powershell
+matlab -batch "startup; r=runtests('tests/TestTask2GeometryScenario.m'); disp(r); assertSuccess(r)"
+```
+
+RED result: `10 Passed, 1 Failed, 0 Incomplete` (exit status `0x00000001`).
+The expected failing method was
+`geometryAndSteeringRejectInvalidPhysicalInputs`: non-orthogonal rotations,
+non-unit direction columns, and direction cosines outside the unit disk were
+accepted without error.
+
+After adding proper-rotation, unit-direction, and unit-disk validation, the
+same command produced `11 Passed, 0 Failed, 0 Incomplete` in 3.74 s.  The new
+signal test also verifies unit-modulus QPSK, low desired/interferer sample
+correlation, and derived complex-noise power/circularity without exposing a
+noise-truth field to algorithm inputs.

@@ -26,6 +26,42 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyEqual(azElRad, [0, pi / 2; 0, 0], 'AbsTol', 1e-12);
         end
 
+        function nonzeroRotationAndCoordinateConventionMatchesLiteralZYXCase(testCase)
+            etaRad = [pi / 6; -pi / 4; pi / 3];
+            R = uav.geometry.rotationZYX(etaRad);
+            uWorld = [0; 0; -1];
+            uArray = uav.geometry.worldToArray(R, uWorld);
+            [xi, azElRad] = uav.geometry.directionCoordinates(uArray);
+            expectedR = [ ...
+                0.353553390593274, -0.926776695296637, 0.126826484044322; ...
+                0.612372435695795, 0.126826484044322, -0.780330085889911; ...
+                0.707106781186548, 0.353553390593274, 0.612372435695795];
+
+            testCase.verifyEqual(R, expectedR, 'AbsTol', 1e-12);
+            testCase.verifyEqual(uArray, [-0.707106781186548; ...
+                -0.353553390593274; -0.612372435695795], 'AbsTol', 1e-12);
+            testCase.verifyEqual(xi, [-0.707106781186548; -0.353553390593274], ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(azElRad, [-2.677945044588987; -0.659058035826409], ...
+                'AbsTol', 1e-12);
+        end
+
+        function geometryAndSteeringRejectInvalidPhysicalInputs(testCase)
+            testCase.verifyError(@() uav.geometry.worldToArray(diag([1, 1, 2]), [0; 0; -1]), ...
+                'uav:geometry:InvalidRotation');
+            testCase.verifyError(@() uav.geometry.worldToArray(eye(3), [0; 0; -2]), ...
+                'uav:geometry:InvalidDirectionNorm');
+            testCase.verifyError(@() uav.geometry.directionCoordinates([1.01; 0; 0]), ...
+                'uav:geometry:InvalidDirectionNorm');
+            testCase.verifyError(@() uav.array.steeringUPA([1.01; 0], 2, 2, [0.5, 0.5]), ...
+                'uav:array:OutsideVisibleDisk');
+
+            [xi, azElRad] = uav.geometry.directionCoordinates([0; 0; 1]);
+            a = uav.array.steeringUPA(xi, 2, 2, [0.5, 0.5]);
+            testCase.verifyEqual(azElRad, [0; pi / 2], 'AbsTol', 1e-12);
+            testCase.verifyEqual(a, ones(4, 1), 'AbsTol', 1e-12);
+        end
+
         function rectangularSteeringUsesVxKronVyOrderAndHasExpectedNorm(testCase)
             a = uav.array.steeringUPA([0.25; -0.5], 2, 3, [0.5, 0.5]);
             expected = [1; -1i; -1; ...
@@ -128,6 +164,29 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
                 cfg.derived.noisePower * eye(cfg.derived.M);
 
             testCase.verifyEqual(obs.Rx, expectedRx, 'RelTol', 0.08);
+        end
+
+        function qpskSignalsAndDerivedNoiseHaveExpectedStatistics(testCase)
+            cfg = config('smoke');
+            cfg.timeline.L = 50000;
+            cfg = uav.config.validate(cfg);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(43, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(43, 2));
+            A = obs.truth.trueASVs;
+            desired = sqrt(obs.truth.desiredPower) * A(:, 1) * obs.pilot;
+            interference = A(:, 2:end) * (sqrt(obs.truth.interfererPowers(:)) .* ...
+                obs.truth.interfererSymbols);
+            noise = obs.X - desired - interference;
+            pilotInterfererCorrelation = mean(obs.pilot .* conj( ...
+                obs.truth.interfererSymbols(1, :)));
+
+            testCase.verifyEqual(abs(obs.pilot), ones(1, cfg.timeline.L), 'AbsTol', 1e-12);
+            testCase.verifyEqual(abs(obs.truth.interfererSymbols), ...
+                ones(cfg.derived.J, cfg.timeline.L), 'AbsTol', 1e-12);
+            testCase.verifyLessThan(abs(pilotInterfererCorrelation), 0.02);
+            testCase.verifyEqual(mean(abs(noise).^2, 'all'), cfg.derived.noisePower, ...
+                'RelTol', 0.03);
+            testCase.verifyLessThan(abs(mean(noise.^2, 'all')), 0.01);
         end
     end
 end

@@ -4,6 +4,10 @@ function a = steeringUPA(xi, Nx, Ny, dOverLambda)
 if ~isnumeric(xi) || size(xi, 1) ~= 2 || any(~isfinite(xi), 'all')
     error('uav:array:InvalidDirectionCosines', 'xi must be finite with two rows.');
 end
+if any(sum(abs(xi).^2, 1) > 1 + 1e-10)
+    error('uav:array:OutsideVisibleDisk', ...
+        'Each direction-cosine column must lie within the unit disk.');
+end
 if ~isscalar(Nx) || Nx <= 0 || Nx ~= floor(Nx) || ...
         ~isscalar(Ny) || Ny <= 0 || Ny ~= floor(Ny)
     error('uav:array:InvalidDimensions', 'Nx and Ny must be positive integers.');
