@@ -134,6 +134,12 @@ if cfg.spectrum.desiredExclusionHalfWidthDeg < 0 || ...
         'The desired exclusion half width must lie in [0, 90) degrees.');
 end
 validateNonnegativeFiniteScalar(cfg.spectrum.diagonalLoading, 'spectrum.diagonalLoading');
+validatePositiveFiniteScalar(cfg.spectrum.noiseEigenvalueFraction, ...
+    'spectrum.noiseEigenvalueFraction');
+if cfg.spectrum.noiseEigenvalueFraction > 1
+    error('uav:config:InvalidAlgorithmParameter', ...
+        'spectrum.noiseEigenvalueFraction must not exceed one.');
+end
 validateAlgorithmFiniteScalar(cfg.incm.shrinkage, 'incm.shrinkage');
 if cfg.incm.shrinkage < 0 || cfg.incm.shrinkage > 1
     error('uav:config:InvalidAlgorithmParameter', ...
@@ -144,6 +150,11 @@ validatePositiveFiniteScalar(cfg.incm.eigenvalueFloorRatio, ...
 if cfg.incm.eigenvalueFloorRatio > 1
     error('uav:config:InvalidAlgorithmParameter', ...
         'incm.eigenvalueFloorRatio must not exceed one.');
+end
+validatePositiveFiniteScalar(cfg.incm.noiseFloorRatio, 'incm.noiseFloorRatio');
+if cfg.incm.noiseFloorRatio > 1
+    error('uav:config:InvalidAlgorithmParameter', ...
+        'incm.noiseFloorRatio must not exceed one.');
 end
 validateNonnegativeFiniteScalar(cfg.incm.lambdaS, 'incm.lambdaS');
 validateNonnegativeFiniteScalar(cfg.incm.lambdaT, 'incm.lambdaT');
