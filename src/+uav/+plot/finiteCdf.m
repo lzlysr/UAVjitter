@@ -1,5 +1,7 @@
 function [x, probability] = finiteCdf(values)
-%FINITECDF Return a finite-only empirical CDF without toolbox state.
+%FINITECDF 计算仅含有限样本的经验累积分布函数坐标。
+%   x为升序样本，probability(i)=i/N。空输入返回两个0×1列向量。
+%   本函数不创建图窗，也不依赖Statistics Toolbox的ecdf状态。
 
 x = sort(values(isfinite(values)));
 x = x(:);

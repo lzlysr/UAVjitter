@@ -1,5 +1,7 @@
 function [record, nextState] = runVariants(obs, priorState, cfg)
-%RUNVARIANTS Evaluate full temporal reconstruction and one-switch ablations.
+%RUNVARIANTS 在同一观测上运行完整时序方法和五个单模块消融。
+%   每个变体维持独立priorState，防止一个变体的历史谱进入另一个变体。
+%   所有变体共享同一离线epsilonS和鲁棒权值求解器。
 
 variantNames = reshape(cfg.experiments.ablationNames, 1, []);
 expected = ["full", "lambda_t_zero", "identity_alignment", ...
@@ -31,6 +33,7 @@ effectiveConfigs = cell(1, variantCount);
 aRef = cfg.derived.nominalSteeringReference;
 algorithmObservation = uav.experiment.algorithmObservation(obs);
 for variantIndex = 1:variantCount
+    % 从完整基线cfg复制后只修改声明的一个字段。
     variantCfg = applyVariant(cfg, variantNames(variantIndex));
     validateVariantDelta(cfg, variantCfg, variantNames(variantIndex));
     effectiveConfigs{variantIndex} = variantCfg.incm;
@@ -55,6 +58,7 @@ for variantIndex = 1:variantCount
 end
 
 function validateFullBaseline(cfg)
+% 消融实验必须从所有主模块开启、候选pilot投影关闭的规范基线出发。
 ablation = cfg.incm.ablation;
 isFull = cfg.incm.lambdaT > 0 && ablation.temporalContinuity && ...
     ablation.alignment && ablation.adaptiveQuadrature && ...
@@ -66,6 +70,7 @@ end
 end
 
 function validateVariantDelta(base, variant, name)
+% 把声明的单字段改回基线后，整个配置必须与base逐元素相同。
 restored = variant;
 switch name
     case "full"
@@ -124,6 +129,7 @@ nextState = priorState;
 end
 
 function cfg = applyVariant(cfg, variant)
+% 每个case只改变一个配置量；“full”保持原配置不变。
 switch variant
     case "full"
     case "lambda_t_zero"

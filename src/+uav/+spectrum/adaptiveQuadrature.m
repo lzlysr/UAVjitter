@@ -1,10 +1,16 @@
 function quadrature = adaptiveQuadrature(powerMap, spectrumDiagnostics, includedMask, peakIndices, cfg)
-%ADAPTIVEQUADRATURE Partition grid cells into fine peak and coarse regions.
+%ADAPTIVEQUADRATURE 对峰值邻域细分、其余干扰区域粗聚合。
+%   输入功率图和掩码与Capon网格同尺寸；peakIndices是selectPeaks给出的
+%   二维线性索引。输出quadrature包含N×2节点、N×1面积权重和谱值。
+%
+%   设计目标是在峰值附近保留角域分辨率，同时减少平坦背景区域的节点数。
+%   细区和粗区由互斥掩码划分，因此不会有意重复表示同一原始网格单元。
 
 validateInputs(powerMap, spectrumDiagnostics, includedMask, peakIndices, cfg);
 gridStep = sqrt(spectrumDiagnostics.cellArea);
 fineMask = false(size(includedMask));
 radius = cfg.spectrum.quadratureFineRadiusBins;
+% 把每个检测峰周围指定半径的网格单元标为细分区域。
 for peakIndex = reshape(peakIndices, 1, [])
     [peakRow, peakColumn] = ind2sub(size(includedMask), peakIndex);
     rows = max(1, peakRow - radius):min(size(includedMask, 1), peakRow + radius);
@@ -13,6 +19,7 @@ for peakIndex = reshape(peakIndices, 1, [])
 end
 fineMask = fineMask & includedMask;
 
+% 峰值单元内部生成refinement×refinement子节点；非峰值区按stride聚块。
 [fineNodes, fineWeights, fineValues] = refineCells(powerMap, ...
     spectrumDiagnostics, fineMask, gridStep, ...
     cfg.spectrum.quadratureRefinement, cfg);
@@ -50,12 +57,14 @@ weights = zeros(0, 1);
 values = zeros(0, 1);
 offsets = (((1:refinement) - 0.5) / refinement - 0.5) * gridStep;
 for linearIndex = reshape(linearIndices, 1, [])
+    % 子节点位于原单元内部的等距中心位置，而不是落在单元边界上。
     center = [diagnostics.xiX(linearIndex), diagnostics.xiY(linearIndex)];
     [offsetX, offsetY] = meshgrid(offsets, offsets);
     cellNodes = [center(1) + offsetX(:), center(2) + offsetY(:)];
     admissible = uav.spectrum.admissibleDirections(cellNodes, cfg);
     cellNodes = cellNodes(admissible, :);
     if isempty(cellNodes)
+        % 极端边界单元若所有子点不可接受，保留已验证可接受的原中心。
         cellNodes = center;
     end
     cellWeights = diagnostics.cellArea / size(cellNodes, 1) * ...
@@ -79,6 +88,7 @@ if isempty(rows)
 end
 blockRows = floor((rows - 1) / stride);
 blockColumns = floor((columns - 1) / stride);
+% 相同粗块内的原始单元合并成一个代表节点，总面积保持不变。
 [~, ~, groups] = unique([blockRows, blockColumns], 'rows', 'stable');
 groupCount = max(groups);
 nodes = zeros(groupCount, 2);
@@ -91,6 +101,7 @@ for group = 1:groupCount
     memberIndices = linearIndices(members);
     memberNodes = [diagnostics.xiX(memberIndices), diagnostics.xiY(memberIndices)];
     centroid = mean(memberNodes, 1);
+    % 选择离几何中心最近的真实网格点，避免代表点落到不可见域外。
     [~, representativeIndex] = min(sum((memberNodes - centroid).^2, 2));
     nodes(group, :) = memberNodes(representativeIndex, :);
     weights(group) = count * cellArea;

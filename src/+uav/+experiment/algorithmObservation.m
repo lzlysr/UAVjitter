@@ -1,5 +1,8 @@
 function safe = algorithmObservation(obs)
-%ALGORITHMOBSERVATION Return the whitelist observation passed to non-Oracle code.
+%ALGORITHMOBSERVATION 构造传给非Oracle算法的观测白名单。
+%   generatePeriod的公共接口按合同保留obs.truth，但重构算法不能看到
+%   真实方向、真实INCM或干扰符号。本函数不是简单删除一个字段，而是只
+%   复制五个明确允许的字段，因此未来增加的其他诊断字段也不会意外泄漏。
 
 required = {'X', 'Rx', 'pilot', 'k', 'nominalSteeringReference', 'truth'};
 if ~isstruct(obs) || ~all(isfield(obs, required))

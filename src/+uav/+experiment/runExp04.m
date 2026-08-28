@@ -1,5 +1,7 @@
 function result = runExp04(cfg)
-%RUNEXP04 Run full configured dynamic stability traces and distributions.
+%RUNEXP04 实验4：评估默认动态场景下的逐周期稳定性。
+%   本实验保留完整[试次×周期×方法]数据，既观察跨试次中位时序，也把
+%   全部有限输出用于经验CDF、低分位和低于阈值的概率计算。
 
 experimentTimer = tic;
 [cfg, calibration] = uav.experiment.prepare(cfg);
@@ -10,6 +12,7 @@ methodCount = numel(cfg.experiments.methodNames);
 [raw, seeds] = uav.experiment.collectMethods( ...
     cfg, experimentIndex, 1, periodCount);
 sinrValues = reshape(raw.sinrLinear, trialCount * periodCount, methodCount);
+% 动态相关性由summarizeTrials在bootstrap时按完整试次簇保留。
 bootstrapSubstream = uav.experiment.substream( ...
     cfg, experimentIndex, 1, 0, 0, "bootstrap");
 sinrSummary = uav.experiment.summarizeTrials( ...
@@ -21,6 +24,7 @@ leakageSummary = uav.experiment.summarizeFinite( ...
 runtimeSummary = uav.experiment.summarizeFinite( ...
     reshape(raw.runtimeSec, [], methodCount), cfg);
 outageThresholdLinear = 10^(cfg.experiments.outageThresholdDb / 10);
+% 先把配置dB阈值转回线性域，再与原始SINR比较。
 outageProbability = sum(sinrValues < outageThresholdLinear, 1) / size(sinrValues, 1);
 periodMedianLinear = squeeze(median(raw.sinrLinear, 1));
 periodMedianDb = 10 * log10(periodMedianLinear);
@@ -34,6 +38,7 @@ summaryTable = table(cfg.experiments.methodNames.', sinrSummary.lowDb.', ...
     'meanRuntimeSec', 'p95RuntimeSec'});
 
 fig = uav.plot.newFigure(cfg);
+% 五个面板：SINR时序、经验CDF、期望增益、干扰泄漏和运行时间。
 layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 timeMs = (0:periodCount - 1).' * cfg.timeline.dtSec * 1e3;
@@ -42,6 +47,7 @@ xlabel('Time (ms)'); ylabel('Across-trial median SINR (dB)'); grid on;
 legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
 nexttile(layout); hold on;
 for methodIndex = 1:methodCount
+    % CDF仅在展示时将线性SINR转换为dB。
     [cdfX, cdfProbability] = uav.plot.finiteCdf( ...
         10 * log10(sinrValues(:, methodIndex)));
     plot(cdfX, cdfProbability, 'LineWidth', cfg.plot.lineWidth);

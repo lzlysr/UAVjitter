@@ -1,5 +1,7 @@
 function result = runExp03(cfg)
-%RUNEXP03 Run the paired snapshot-count sweep.
+%RUNEXP03 实验3：配对扫描每周期快拍数L。
+%   只改变timeline.L，比较有限快拍对SINR、INCM误差、最小特征值、条件数
+%   和运行时间的影响。L<M时噪声估计按模型合同使用配置噪声先验。
 
 experimentTimer = tic;
 [cfg, calibration] = uav.experiment.prepare(cfg);
@@ -12,6 +14,7 @@ methodCount = numel(cfg.experiments.methodNames);
 raw = allocateRaw(trialCount, periodCount, pointCount, methodCount);
 seeds = cell(1, pointCount);
 for pointIndex = 1:pointCount
+    % 每个L重新校验配置，但继续使用同一次离线标定的鲁棒半径。
     pointCfg = cfg;
     pointCfg.timeline.L = snapshotPoints(pointIndex);
     pointCfg = uav.config.validate(pointCfg);
@@ -21,6 +24,7 @@ for pointIndex = 1:pointCount
     raw = assignPoint(raw, pointRaw, pointIndex);
 end
 sinrSummary = uav.experiment.summarizePoints(raw.sinrLinear, cfg, experimentIndex);
+% INCM指标对Oracle、冻结、SCM和DL不可用，保留NaN并用finite汇总器处理。
 nmseSummary = uav.experiment.summarizeFinitePoints(raw.incmNmse, cfg);
 minimumEigenvalueSummary = uav.experiment.summarizeFinitePoints( ...
     raw.incmMinimumEigenvalue, cfg);
@@ -32,6 +36,7 @@ summaryTable = snapshotTable(snapshotPoints, cfg.experiments.methodNames, ...
     conditionNumberSummary, runtimeSummary);
 
 fig = uav.plot.newFigure(cfg);
+% 快拍点按对数横轴展示；五个面板对应实验协议中的五类输出。
 layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 semilogx(snapshotPoints, sinrSummary.medianDb, '-o', ...
@@ -72,6 +77,7 @@ result = uav.experiment.finalize(result, summaryTable, fig, cfg, ...
 end
 
 function raw = allocateRaw(trials, periods, points, methods)
+%ALLOCATERAW 按标准四维实验数据契约预分配所有字段。
 fields = {'sinrLinear', 'desiredGain', 'interferenceLeakage', 'runtimeSec'};
 for index = 1:numel(fields)
     raw.(fields{index}) = zeros(trials, periods, points, methods);
@@ -84,6 +90,7 @@ raw.snapshotSignatures = zeros(trials, periods, points, methods, 4);
 end
 
 function raw = assignPoint(raw, pointRaw, pointIndex)
+%ASSIGNPOINT 将当前L的原始指标写入总扫描数组。
 fields = {'sinrLinear', 'desiredGain', 'interferenceLeakage', 'runtimeSec', ...
     'incmNmse', 'incmMinimumEigenvalue', 'incmConditionNumber'};
 for index = 1:numel(fields)
@@ -94,6 +101,7 @@ end
 
 function output = snapshotTable(points, names, sinr, nmse, minimumEigenvalue, ...
         conditionNumber, runtime)
+%SNAPSHOTTABLE 生成每个“快拍数—方法”组合一行的CSV长表。
 [pointGrid, methodGrid] = ndgrid(points, 1:numel(names));
 output = table(pointGrid(:), reshape(names(methodGrid), [], 1), ...
     sinr.medianDb(:), sinr.lowDb(:), nmse.median(:), ...

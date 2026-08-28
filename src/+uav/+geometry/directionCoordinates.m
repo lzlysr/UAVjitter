@@ -1,5 +1,8 @@
 function [xi, azElRad] = directionCoordinates(uArray)
-%DIRECTIONCOORDINATES Return direction cosines and azimuth/elevation in radians.
+%DIRECTIONCOORDINATES 从三维单位方向提取阵列建模所需坐标。
+%   uArray - 3×Q阵列坐标单位方向；
+%   xi     - 2×Q方向余弦[x分量;y分量]，直接进入UPA导向矢量；
+%   azElRad- 2×Q[方位角;高度角]，主要用于诊断和绘图。
 
 if size(uArray, 1) ~= 3 || any(~isfinite(uArray), 'all')
     error('uav:geometry:InvalidDirection', 'uArray must be finite with three rows.');
@@ -9,6 +12,7 @@ if any(abs(vecnorm(uArray) - 1) > 1e-10)
         'Every array direction must have unit norm within tolerance.');
 end
 
+% UPA位于阵列x-y平面，因此相位只由方向的x、y分量决定。
 xi = uArray(1:2, :);
 if any(sum(abs(xi).^2, 1) > 1 + 1e-10)
     error('uav:geometry:OutsideVisibleDisk', ...

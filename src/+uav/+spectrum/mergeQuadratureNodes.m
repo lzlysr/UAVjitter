@@ -1,6 +1,9 @@
 function [mergedNodes, mergedWeights, mergedValues, diagnostics] = ...
         mergeQuadratureNodes(nodes, weights, values, tolerance)
-%MERGEQUADRATURENODES Merge near-duplicate nodes without quantizing coordinates.
+%MERGEQUADRATURENODES 合并粗细求积中重复或近重复的方向节点。
+%   nodes/weights/values分别为N×2节点、单元面积权重和谱值。
+%   tolerance只用于构造分组键；输出节点仍保留首次出现的原坐标，不把
+%   实际方向量化到容差网格。合并后的谱值采用面积加权平均。
 
 validateInputs(nodes, weights, values, tolerance);
 if isempty(nodes)
@@ -13,6 +16,7 @@ if isempty(nodes)
 end
 
 keys = round(nodes / tolerance);
+% stable保证输出节点顺序与首次出现顺序一致，便于确定性复现。
 [~, firstIndices, groups] = unique(keys, 'rows', 'stable');
 mergedWeights = accumarray(groups, weights);
 mergedValues = accumarray(groups, weights .* values) ./ mergedWeights;

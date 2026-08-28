@@ -1,5 +1,9 @@
 classdef TestTask5Experiments < matlab.unittest.TestCase
+    %TESTTASK5EXPERIMENTS 第五阶段：实验编排、统计、导出和故障恢复测试。
+    % 这些测试锁定“方法公平比较”和“结果包完整发布”边界，不评价某个
+    % 方法的科学优越性。所有产生的文件都写入临时目录并在测试后清理。
     methods (TestMethodSetup)
+        % 同时加入根目录、src和experiments，以便测试公开入口和包实现。
         function addRuntimePaths(testCase)
             rootDir = fileparts(fileparts(mfilename('fullpath')));
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture(rootDir));
@@ -11,6 +15,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
     end
 
     methods (Test)
+        % 验证方法/消融顺序、周期数、bootstrap和绘图输出等实验配置合同。
         function configDefinesAndValidatesAllExperimentControls(testCase)
             cfg = config('smoke');
 
@@ -47,6 +52,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 'uav:config:InvalidExperimentParameter');
         end
 
+        % 线性域统计与共享行bootstrap必须可复现，且不能直接平均dB样本。
         function linearAggregationAndBootstrapAreDeterministic(testCase)
             cfg = compactConfig(testCase);
             values = [1, 2; 4, NaN; 9, 8; 16, 32];
@@ -63,6 +69,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyEqual(first.validCounts, [4, 3]);
         end
 
+        % 试次簇重采样必须保持方法配对，四倍线性关系应在CI中精确保留。
         function trialClusterBootstrapPreservesMethodPairing(testCase)
             cfg = compactConfig(testCase);
             base = reshape([1, 2, 3, 4, 8, 16], 3, 2);
@@ -80,6 +87,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 'AbsTol', 1e-12);
         end
 
+        % paper的500×500数据只能按500个试次簇抽样，不能展开周期bootstrap。
         function paperSizedAggregationDoesNotBootstrapIndividualPeriods(testCase)
             cfg = config('paper');
             cfg.experiments.bootstrapReplicates = 2;
@@ -94,6 +102,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyEqual(summary.ci95Linear, [1, 2; 1, 2], 'AbsTol', 0);
         end
 
+        % 六种方法应共享一个快拍，冻结权值保持不变，并使用固定epsilonS。
         function sixMethodRunnerUsesOneSnapshotAndFixedCalibration(testCase)
             cfg = compactConfig(testCase);
             cfg.beamforming.epsilonS = 0.1;
@@ -124,6 +133,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(record1.interferenceLeakage)));
         end
 
+        % 用保存的子流独立重建每个obs，逐方法核对快拍摘要以证明真实配对。
         function storedSubstreamsRegenerateEveryPairedSnapshot(testCase)
             cfg = compactConfig(testCase);
             cfg.monteCarlo.nTrials = 2;
@@ -148,6 +158,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             end
         end
 
+        % 非Oracle白名单应剥离truth以及未来可能增加的未批准诊断字段。
         function algorithmObservationWhitelistsNonOracleInputs(testCase)
             cfg = compactConfig(testCase);
             scenario = uav.scenario.generate(cfg, uav.util.makeStream(719, 1));
@@ -168,6 +179,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 obs.nominalSteeringReference, 'AbsTol', 0);
         end
 
+        % 六个消融变体必须各自只改变声明的一个配置字段。
         function ablationRunnerChangesExactlyOneConfiguredSwitch(testCase)
             cfg = compactConfig(testCase);
             cfg.beamforming.epsilonS = 0.1;
@@ -207,6 +219,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 'uav:experiment:InvalidFullAblationBaseline');
         end
 
+        % 结果写入器应生成六种格式、完整元数据，并能确定性覆盖同名结果。
         function metadataAndArtifactWriterCreateCompleteRerunnableBundle(testCase)
             cfg = compactConfig(testCase);
             fig = figure('Visible', 'off');
@@ -261,6 +274,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyFalse(isgraphics(failingFigure));
         end
 
+        % 发布中途失败时必须恢复旧文件并清理暂存与备份。
         function failedBundlePublicationRestoresPreviousFiles(testCase)
             root = tempname;
             mkdir(root);
@@ -288,6 +302,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyFalse(any(isfile(string(struct2cell(backups)))));
         end
 
+        % 到达提交点后备份清理失败不得撤销完整新结果，应保留旧备份报警。
         function postCommitBackupCleanupFailureKeepsNewBundle(testCase)
             root = tempname;
             mkdir(root);
@@ -321,6 +336,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyFalse(any(isfile(string(struct2cell(staged)))));
         end
 
+        % 回滚恢复本身失败时必须保留可人工恢复的backup并报告专用错误。
         function failedRollbackPreservesRecoverableBackup(testCase)
             root = tempname;
             mkdir(root);
@@ -351,6 +367,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyFalse(any(isfile(string(struct2cell(staged)))));
         end
 
+        % 五个smoke入口必须分别生成MAT/CSV/FIG/PDF/PNG/JSON且字段完整。
         function fiveSmokeEntrypointsProduceEveryArtifactType(testCase)
             cfg = compactConfig(testCase);
             configuredRoot = string(cfg.output.rootDir);
@@ -398,6 +415,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             end
         end
 
+        % 公开实验入口不得出现运行时数值赋值，防止参数绕过config。
         function entrypointsContainNoRuntimeNumericAssignments(testCase)
             rootDir = fileparts(fileparts(mfilename('fullpath')));
             names = uav.experiment.entryPoints();
@@ -407,6 +425,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             end
         end
 
+        % epsilon标定调用只允许出现在prepare中，五个runExp各调用prepare一次。
         function epsilonCalibrationOccursOnlyInExperimentPreparation(testCase)
             rootDir = fileparts(fileparts(mfilename('fullpath')));
             packageDir = fullfile(rootDir, 'src', '+uav', '+experiment');
@@ -433,6 +452,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             end
         end
 
+        % 生成结果和缓存必须被Git忽略，避免大型可再生文件进入版本库。
         function generatedArtifactsAreIgnoredByGit(testCase)
             rootDir = fileparts(fileparts(mfilename('fullpath')));
             candidates = { ...
@@ -450,6 +470,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
 end
 
 function cfg = compactConfig(testCase)
+%COMPACTCONFIG 创建临时输出目录和小规模完整实验配置，加快集成测试。
 cfg = config('smoke');
 cfg.timeline.K = 2;
 cfg.monteCarlo.nTrials = 1;
@@ -478,18 +499,21 @@ cfg.output.overwrite = true;
 end
 
 function closeIfValid(fig)
+%CLOSEIFVALID 清理仍存在的测试图窗。
 if isgraphics(fig)
     close(fig);
 end
 end
 
 function cleanupDir(pathValue)
+%CLEANUPDIR 删除本测试独占的临时目录及其中可再生成文件。
 if isfolder(pathValue)
     rmdir(pathValue, 's');
 end
 end
 
 function writeText(pathValue, value)
+%WRITETEXT 创建事务故障注入所需的短文本夹具。
 fileId = fopen(pathValue, 'w');
 if fileId < 0
     error('uav:test:FixtureWriteFailure', 'Could not create test fixture.');
@@ -499,6 +523,7 @@ fwrite(fileId, value, 'char');
 end
 
 function moveTestFile(source, destination)
+%MOVETESTFILE 与生产move语义一致的测试操作封装。
 [moved, message] = movefile(source, destination, 'f');
 if ~moved
     error('uav:experiment:ArtifactPublishFailure', ...
@@ -507,6 +532,7 @@ end
 end
 
 function moveWithRestoreFailure(source, destination, failingSource)
+%MOVEWITHRESTOREFAILURE 在指定backup恢复时注入可控失败。
 if string(source) == string(failingSource)
     error('uav:test:InjectedRestoreFailure', 'Injected restore failure.');
 end
@@ -514,6 +540,7 @@ moveTestFile(source, destination);
 end
 
 function deleteWithFailure(pathValue, failingPath)
+%DELETEWITHFAILURE 在指定备份清理时注入可控失败。
 if string(pathValue) == string(failingPath)
     error('uav:test:InjectedCleanupFailure', 'Injected cleanup failure.');
 end
@@ -521,5 +548,6 @@ deleteTestFile(pathValue);
 end
 
 function deleteTestFile(pathValue)
+%DELETETESTFILE 默认测试删除操作。
 delete(pathValue);
 end

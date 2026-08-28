@@ -1,5 +1,8 @@
 function [record, nextState] = runMethods(obs, priorState, cfg)
-%RUNMETHODS Evaluate the fixed six methods on one shared observation.
+%RUNMETHODS 在同一个观测上公平运行固定六种比较方法。
+%   priorState只包含冻结权值和时序INCM上一周期状态，二者相互独立。
+%   record返回每种方法的指标、运行时间、权值和诊断；所有方法使用相同
+%   aRef、gamma、epsilonS以及同一快拍X。
 
 methodNames = reshape(cfg.experiments.methodNames, 1, []);
 if ~isequal(methodNames, ...
@@ -12,6 +15,7 @@ if ~isstruct(obs) || ~all(isfield(obs, {'X', 'Rx', 'truth'}))
         'The fair runner requires one generated observation and isolated truth.');
 end
 if isempty(priorState)
+    % 首周期同时初始化冻结基线和时序方法；之后沿各自状态递推。
     priorState = struct('frozenWeight', [], 'temporalState', []);
 elseif ~isstruct(priorState) || ...
         ~all(isfield(priorState, {'frozenWeight', 'temporalState'}))
@@ -38,11 +42,13 @@ for methodIndex = 1:methodCount
     estimatedIncm = [];
     switch method
         case "oracle"
+            % 唯一允许在求权值阶段读取真实INCM和真实期望流形的方法。
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "mvdr", obs.truth.trueIncm, obs.truth.trueASVs(:, 1), cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics, ...
                 'truthAccess', "oracle-only");
         case "frozen"
+            % 首周期用SCM求一次权值，后续不随姿态和观测更新。
             if isempty(priorState.frozenWeight)
                 [priorState.frozenWeight, beamformingDiagnostics] = ...
                     uav.beamforming.solve("mvdr", obs.Rx, aRef, cfg);
@@ -56,14 +62,17 @@ for methodIndex = 1:methodCount
             methodDiagnostics = struct('beamforming', beamformingDiagnostics, ...
                 'initializedThisPeriod', initialized);
         case "scm"
+            % 直接把含期望信号的当前SCM代入标准MVDR。
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "mvdr", obs.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
         case "dl"
+            % 当前SCM加显式尺度化对角加载。
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "dlmvdr", obs.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
         case "static"
+            % 当前周期静态Capon-INCM + 与时序方法相同的鲁棒权值求解器。
             [estimatedIncm, ~, reconstructionDiagnostics] = ...
                 uav.incm.reconstruct("static", algorithmObservation, [], cfg);
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
@@ -71,6 +80,7 @@ for methodIndex = 1:methodCount
             methodDiagnostics = struct('reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
         case "temporal"
+            % 使用并更新上一周期增强谱状态。
             [estimatedIncm, priorState.temporalState, reconstructionDiagnostics] = ...
                 uav.incm.reconstruct("temporal", algorithmObservation, ...
                 priorState.temporalState, cfg);
@@ -80,8 +90,10 @@ for methodIndex = 1:methodCount
                 'beamforming', beamformingDiagnostics);
     end
     runtimeSec(methodIndex) = toc(methodTimer);
+    % 真值只在权值已经确定后交给统一指标函数。
     metricTruth = obs.truth;
     if ~isempty(estimatedIncm)
+        % 只有真正重构INCM的方法才报告NMSE、最小特征值和条件数。
         metricTruth.estimatedIncm = estimatedIncm;
     end
     metrics = uav.metrics.evaluate(weight, metricTruth, cfg);
@@ -99,6 +111,7 @@ for methodIndex = 1:methodCount
 end
 
 signature = uav.util.snapshotSignature(obs.X);
+% 同一摘要复制到六个方法，用于实验层自动检查配对观测。
 record = struct( ...
     'methodNames', methodNames, ...
     'sinrLinear', sinrLinear, ...

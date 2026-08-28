@@ -1,5 +1,7 @@
 function summary = summarizeFinitePoints(values, cfg)
-%SUMMARIZEFINITEPOINTS Summarize finite trial-period data by point and group.
+%SUMMARIZEFINITEPOINTS 按扫描点汇总普通有限指标。
+%   输入标准维度为[试次×周期×扫描点×方法]。对每个扫描点，把试次和
+%   周期展平成样本行，再调用summarizeFinite处理每个方法列。
 
 dimensions = size(values);
 if numel(dimensions) < 4

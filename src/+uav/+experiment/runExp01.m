@@ -1,5 +1,10 @@
 function result = runExp01(cfg)
-%RUNEXP01 Validate attitude, direction, steering mismatch, and zero jitter.
+%RUNEXP01 实验1：验证姿态—方向—阵列流形动态模型。
+%   本实验不比较六种波束形成算法，而是回答模型是否按预期工作：
+%   1) 三轴姿态偏差是否随时间变化；
+%   2) 世界固定方向在阵列坐标系中是否产生时变方向余弦；
+%   3) 名义流形与真实流形的失配和阵列响应如何变化；
+%   4) 独立零抖动场景是否严格保持不变。
 
 experimentTimer = tic;
 [cfg, calibration] = uav.experiment.prepare(cfg);
@@ -14,12 +19,15 @@ arrayResponse = zeros(sourceCount, periodCount);
 for periodIndex = 1:periodCount
     steering = scenario.steeringTruth(:, :, periodIndex);
     nominal = cfg.derived.nominalSteering;
+    % 除以sqrt(M)，得到不随阵元总数线性放大的归一化导向失配。
     mismatch(:, periodIndex) = vecnorm(steering - nominal, 2, 1).' / sqrt(cfg.derived.M);
+    % |a_nom^H a_true|^2/M^2：名义波束观察真实方向时的归一化响应。
     arrayResponse(:, periodIndex) = ...
         abs(sum(conj(nominal) .* steering, 1)).'.^2 / cfg.derived.M^2;
 end
 
 zeroCfg = cfg;
+% 零抖动验证使用独立场景子流，避免直接复用已有数组而形成“自证”。
 zeroCfg.attitude.stdDeg = zeros(size(cfg.attitude.stdDeg));
 zeroCfg = uav.config.validate(zeroCfg);
 zeroCfg.beamforming.epsilonS = cfg.beamforming.epsilonS;
@@ -43,6 +51,7 @@ summaryTable = table(timeMs, attitudeDeg(:, 1), attitudeDeg(:, 2), ...
     'VariableNames', {'timeMs', 'rollDeg', 'pitchDeg', 'yawDeg', ...
     'desiredMismatchNormalized', 'desiredArrayResponseNormalized'});
 for sourceIndex = 1:sourceCount
+    % 每个源分别导出xi_x和xi_y，CSV列名携带源序号。
     summaryTable.("xiX_source" + sourceIndex) = ...
         reshape(scenario.directionCosines(1, sourceIndex, 1:periodCount), [], 1);
     summaryTable.("xiY_source" + sourceIndex) = ...
@@ -50,6 +59,7 @@ for sourceIndex = 1:sourceCount
 end
 
 fig = uav.plot.newFigure(cfg);
+% 四个面板依次展示姿态、方向余弦、导向失配和名义阵列响应。
 layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 plot(timeMs, attitudeDeg, 'LineWidth', cfg.plot.lineWidth);

@@ -1,10 +1,17 @@
 function [alignedPrevious, diagnostics] = align2D(currentMap, previousMap, mask, cfg)
-%ALIGN2D Align a previous spectrum onto current grid coordinates.
+%ALIGN2D 用受限二维平移将上一周期谱对齐到当前谱。
+%   currentMap/previousMap - 尺寸相同的非负二维谱；
+%   mask                   - 只在可见且排除期望区后的共同支撑上比较；
+%   alignedPrevious        - 平移后的上一周期谱，不进行循环回绕。
+%
+%   对每个候选平移计算去均值归一化互相关。若最高相关不足或前两名过于
+%   接近，则认为数据证据不足，退化为恒等映射G_k=I。
 
 validateInputs(currentMap, previousMap, mask, cfg);
 sanitizedPrevious = previousMap;
 sanitizedPrevious(~mask) = 0;
 maxShift = reshape(cfg.spectrum.alignmentMaxShiftBins, 1, 2);
+% 预分配所有(rowShift,columnShift)候选及其相关系数。
 shifts = zeros(prod(2 * maxShift + 1), 2);
 scores = -inf(size(shifts, 1), 1);
 shiftIndex = 0;
@@ -33,6 +40,7 @@ weakEvidence = ~isfinite(bestScore(1)) || ...
 ambiguousEvidence = isfinite(secondScore) && ...
     bestScore(1) - secondScore < cfg.spectrum.alignmentAmbiguityMargin;
 if weakEvidence || ambiguousEvidence
+    % 保守回退：宁可不移动历史谱，也不根据不可靠峰值引入错误先验。
     selectedShift = [0, 0];
     alignedPrevious = sanitizedPrevious;
     if weakEvidence
@@ -77,6 +85,7 @@ end
 end
 
 function score = normalizedCorrelation(first, second, minimumOverlap)
+% 只有有效重叠单元足够多且两幅谱都有变化时，相关系数才有意义。
 if numel(first) < minimumOverlap
     score = -inf;
     return;
@@ -94,6 +103,7 @@ end
 end
 
 function [shifted, shiftedMask] = shiftWithoutWrap(values, mask, rowShift, columnShift)
+% 零填充平移；被移出网格的数据直接丢弃，禁止circshift式循环回绕。
 [rowCount, columnCount] = size(values);
 shifted = zeros(size(values), 'like', values);
 shiftedMask = false(size(mask));

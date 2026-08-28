@@ -1,5 +1,8 @@
 function cfg = validate(cfg)
-%VALIDATE Check simulator configuration and derive array/scenario quantities.
+%VALIDATE 校验配置并计算阵列、场景、功率和频谱网格派生量。
+%   本函数既是输入防线，也是“原始参数->模型可直接使用参数”的转换层。
+%   它不修改用户给出的物理含义，只规范空干扰向量和输出路径，并生成
+%   cfg.derived。重复调用必须得到一致结果。
 
 requiredSections = {'random', 'array', 'timeline', 'attitude', 'sources', ...
     'signal', 'spectrum', 'incm', 'beamforming', 'monteCarlo', 'experiments', ...
@@ -11,6 +14,7 @@ for index = 1:numel(requiredSections)
     end
 end
 
+% 第一组：阵列、时间、姿态、随机和网格的基本尺寸与范围检查。
 validatePositiveInteger(cfg.array.Nx, 'array.Nx');
 validatePositiveInteger(cfg.array.Ny, 'array.Ny');
 validateFiniteVector(cfg.array.spacingOverLambda, 2, 'array.spacingOverLambda');
@@ -40,6 +44,7 @@ if cfg.spectrum.gridSize < 3 || mod(cfg.spectrum.gridSize, 2) == 0
         'spectrum.gridSize must be an odd integer greater than or equal to three.');
 end
 validateAlgorithmParameters(cfg);
+% 第二组：功率、实验扫描和结果管理参数检查。
 validateFiniteScalar(cfg.signal.snrDb, 'signal.snrDb');
 validateFiniteScalar(cfg.signal.noisePower, 'signal.noisePower');
 if cfg.signal.noisePower <= 0
@@ -52,6 +57,7 @@ if any(cfg.experiments.jitterSweepDeg < 0) || any(cfg.experiments.snapshotSweep 
 end
 validateExperimentParameters(cfg);
 
+% 第三组：方向采用[azimuth,elevation]，当前下行场景限定在阵列下半球。
 validateDirections(cfg.sources.desiredAzElDeg, 'desired');
 if ~isequal(size(cfg.sources.desiredAzElDeg), [1, 2])
     error('uav:config:DesiredDirectionShape', 'Desired direction must be a 1-by-2 azimuth/elevation vector.');
@@ -66,6 +72,7 @@ end
 validateDirections(cfg.sources.interfererAzElDeg, 'interferer');
 
 J = size(cfg.sources.interfererAzElDeg, 1);
+% J由干扰方向行数自动推导；J=0时统一保存为1×0功率向量。
 if J == 0 && isempty(cfg.sources.interfererInrDb)
     cfg.sources.interfererInrDb = zeros(1, 0);
 else
@@ -78,6 +85,7 @@ if numel(cfg.sources.interfererInrDb) ~= J
 end
 
 azElDeg = [cfg.sources.desiredAzElDeg; cfg.sources.interfererAzElDeg];
+% 名义姿态下预计算世界方向、阵列方向、方向余弦和所有源的名义流形。
 worldUnitVectors = azElToUnitVectors(azElDeg);
 nominalRotation = rotationZYX(deg2rad(cfg.attitude.nominalDeg));
 nominalArrayUnitVectors = nominalRotation.' * worldUnitVectors;
@@ -87,10 +95,12 @@ nominalSteering = steeringReference(directionCosines, cfg.array.Nx, cfg.array.Ny
 [gridAxis, xiX, xiY, visibleMask, visibleLinearIndices, ...
     gridDirectionCosines, gridManifold, gridCellArea] = spectrumGrid(cfg);
 
+% SNR/INR均相对于配置噪声功率定义，进入模型后转换为线性功率。
 noisePower = cfg.signal.noisePower;
 desiredPower = noisePower * 10^(cfg.signal.snrDb / 10);
 interfererPowers = noisePower * 10.^(cfg.sources.interfererInrDb(:).' / 10);
 defaultRootDir = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));
+% 若调用者显式配置临时输出目录，则保留该目录；否则落到工程根目录。
 rootDir = configuredOutputPath(cfg.output, 'rootDir', defaultRootDir);
 cfg.output = struct( ...
     'rootDir', rootDir, ...
@@ -105,6 +115,7 @@ cfg.output = struct( ...
     'logDir', configuredOutputPath(cfg.output, 'logDir', ...
         fullfile(rootDir, 'results', 'logs')), ...
     'overwrite', cfg.output.overwrite);
+% 派生量只由上面的已校验原始参数计算，不允许算法反向修改。
 cfg.derived = struct( ...
     'M', cfg.array.Nx * cfg.array.Ny, ...
     'J', J, ...
@@ -131,6 +142,8 @@ end
 
 function [axisValues, xiX, xiY, visibleMask, visibleIndices, ...
         directionCosines, manifold, cellArea] = spectrumGrid(cfg)
+%SPECTRUMGRID 预计算二维方向余弦网格和所有可见节点的UPA流形。
+% 缓存M×Nvisible流形可避免每个周期、每种方法重复生成相同导向矢量。
 axisValues = linspace(-1, 1, cfg.spectrum.gridSize);
 [xiX, xiY] = meshgrid(axisValues, axisValues);
 visibleMask = xiX.^2 + xiY.^2 <= 1;
@@ -143,6 +156,7 @@ cellArea = gridStep^2;
 end
 
 function pathValue = configuredOutputPath(output, field, defaultValue)
+%CONFIGUREDOUTPUTPATH 保留合法的调用者自定义目录，否则使用工程默认目录。
 if ~isfield(output, field) || isempty(output.(field))
     pathValue = defaultValue;
     return;

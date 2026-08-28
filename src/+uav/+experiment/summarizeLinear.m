@@ -1,5 +1,8 @@
 function summary = summarizeLinear(values, cfg, bootstrapSubstream)
-%SUMMARIZELINEAR Aggregate positive linear-domain samples with paired bootstrap.
+%SUMMARIZELINEAR 在线性功率域汇总正值样本并进行配对bootstrap。
+%   values为[样本行×方法]。每次重采样对所有方法使用同一组行索引，保持
+%   方法间配对关系。该函数适用于独立样本行；含多周期相关性的主实验应
+%   调用summarizeTrials，以“试次”作为重采样簇。
 
 if ~isnumeric(values) || ~ismatrix(values) || isempty(values) || ...
         any(values(isfinite(values)) <= 0)
@@ -20,6 +23,7 @@ stream = uav.util.makeStream(cfg.random.baseSeed, bootstrapSubstream);
 rowCount = size(values, 1);
 bootstrapMedians = nan(cfg.experiments.bootstrapReplicates, groupCount);
 for replicate = 1:cfg.experiments.bootstrapReplicates
+    % 每次只生成一列索引，避免paper规模构造巨大的三维索引数组。
     sharedIndices = randi(stream, rowCount, rowCount, 1);
     for group = 1:groupCount
         selectedValues = values(sharedIndices, group);
@@ -61,6 +65,7 @@ summary = struct( ...
 end
 
 function valuesDb = linearToDb(values)
+% 先在线性域完成中位数/均值/置信区间，再把最终统计量转换为dB。
 valuesDb = nan(size(values));
 finite = isfinite(values);
 valuesDb(finite) = 10 * log10(values(finite));

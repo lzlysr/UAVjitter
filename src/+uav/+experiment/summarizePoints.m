@@ -1,5 +1,7 @@
 function summary = summarizePoints(values, cfg, experimentIndex)
-%SUMMARIZEPOINTS Summarize trial-period samples independently by point.
+%SUMMARIZEPOINTS 对每个扫描点独立执行试次簇统计。
+%   输入维度[试次×周期×扫描点×方法]；每个扫描点使用独立bootstrap
+%   子流，保证结果可复现且一个点的重采样不会影响另一个点。
 
 dimensions = size(values);
 if numel(dimensions) < 4

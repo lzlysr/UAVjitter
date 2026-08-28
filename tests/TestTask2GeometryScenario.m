@@ -1,5 +1,9 @@
 classdef TestTask2GeometryScenario < matlab.unittest.TestCase
+    %TESTTASK2GEOMETRYSCENARIO 第二阶段：姿态、坐标、阵列和快拍模型测试。
+    % 重点锁定旋转方向、传感器顺序、稳态姿态统计以及理论协方差，防止
+    % “代码能运行但坐标系相反”这类难以从最终SINR发现的模型错误。
     methods (TestMethodSetup)
+        % 为每个测试建立隔离的工程搜索路径。
         function addSourcePath(testCase)
             rootDir = fileparts(fileparts(mfilename('fullpath')));
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture(rootDir));
@@ -9,6 +13,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
     end
 
     methods (Test)
+        % R必须满足R'*R=I且det(R)=1，排除反射或非正交变换。
         function rotationZYXIsProperOrthogonal(testCase)
             R = uav.geometry.rotationZYX([pi / 6; -pi / 5; pi / 4]);
 
@@ -16,6 +21,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyEqual(det(R), 1, 'AbsTol', 1e-12);
         end
 
+        % 零姿态时世界方向、阵列方向和方位/高度角应保持恒等映射。
         function zeroAttitudeKeepsWorldDirectionsAndCoordinates(testCase)
             uWorld = [1, 0; 0, 1; 0, 0];
             uArray = uav.geometry.worldToArray(eye(3), uWorld);
@@ -26,6 +32,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyEqual(azElRad, [0, pi / 2; 0, 0], 'AbsTol', 1e-12);
         end
 
+        % 用手工可计算的非零ZYX旋转检查乘法顺序和坐标变换方向。
         function nonzeroRotationAndCoordinateConventionMatchesLiteralZYXCase(testCase)
             etaRad = [pi / 6; -pi / 4; pi / 3];
             R = uav.geometry.rotationZYX(etaRad);
@@ -46,6 +53,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
                 'AbsTol', 1e-12);
         end
 
+        % 非单位方向、非法旋转和可见圆盘外方向必须被物理输入校验拒绝。
         function geometryAndSteeringRejectInvalidPhysicalInputs(testCase)
             testCase.verifyError(@() uav.geometry.worldToArray(diag([1, 1, 2]), [0; 0; -1]), ...
                 'uav:geometry:InvalidRotation');
@@ -62,6 +70,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyEqual(a, ones(4, 1), 'AbsTol', 1e-12);
         end
 
+        % 显式验证矩形UPA使用vx⊗vy顺序，并且每列范数为sqrt(M)。
         function rectangularSteeringUsesVxKronVyOrderAndHasExpectedNorm(testCase)
             a = uav.array.steeringUPA([0.25; -0.5], 2, 3, [0.5, 0.5]);
             expected = [1; -1i; -1; ...
@@ -72,6 +81,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyEqual(norm(a), sqrt(6), 'AbsTol', 1e-12);
         end
 
+        % 长轨迹经验协方差应接近配置稳态协方差；零抖动轨迹应严格不变。
         function scenarioHasStationaryAttitudeCovarianceAndZeroJitterBehavior(testCase)
             cfg = config('smoke');
             cfg.array.Nx = 1;
@@ -100,6 +110,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
                 'AbsTol', 1e-12);
         end
 
+        % 同一随机子流逐元素复现快拍，并检查truth与算法观测字段分离。
         function periodIsDeterministicAndSeparatesTruthFromAlgorithmInputs(testCase)
             cfg = config('smoke');
             scenarioA = uav.scenario.generate(cfg, uav.util.makeStream(22, 1));
@@ -122,6 +133,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(obsA.Rx), 'all'));
         end
 
+        % 验证L<M且J=0时仍能生成有限快拍和正确纯噪声INCM。
         function periodSupportsFewerSnapshotsThanSensorsAndZeroInterferers(testCase)
             cfg = config('smoke');
             cfg.sources.interfererAzElDeg = zeros(0, 2);
@@ -138,6 +150,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
                 'AbsTol', 1e-12);
         end
 
+        % 压力测试J>M，确保干扰数不被阵元数或固定示例数量写死。
         function periodSupportsMoreInterferersThanSensors(testCase)
             cfg = config('smoke');
             cfg.array.Nx = 1;
@@ -153,6 +166,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(obs.truth.trueIncm), 'all'));
         end
 
+        % 大L下样本协方差应向由源功率和真实流形得到的理论协方差收敛。
         function largeSnapshotScmConvergesToTheoreticalCovariance(testCase)
             cfg = config('smoke');
             cfg.timeline.L = 50000;
@@ -166,6 +180,7 @@ classdef TestTask2GeometryScenario < matlab.unittest.TestCase
             testCase.verifyEqual(obs.Rx, expectedRx, 'RelTol', 0.08);
         end
 
+        % 检查QPSK单位模、独立性和复高斯噪声的经验功率统计。
         function qpskSignalsAndDerivedNoiseHaveExpectedStatistics(testCase)
             cfg = config('smoke');
             cfg.timeline.L = 50000;

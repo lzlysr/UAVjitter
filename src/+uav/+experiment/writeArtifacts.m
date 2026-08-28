@@ -1,5 +1,7 @@
 function artifacts = writeArtifacts(result, summaryTable, fig, cfg)
-%WRITEARTIFACTS Stage and publish one complete deterministic result bundle.
+%WRITEARTIFACTS 暂存并发布一套完整、可复现的实验结果文件。
+%   六种格式先写入各目标目录中的临时文件；任何导出失败都会清理暂存
+%   文件，不会覆盖上一轮完整结果。全部导出成功后再交给事务发布器。
 
 if ~isstruct(result) || ~isfield(result, 'metadata') || ...
         ~istable(summaryTable) || ~isgraphics(fig, 'figure')
@@ -17,9 +19,11 @@ end
 
 staged = stagingPaths(artifacts);
 backups = stagingPaths(artifacts);
+% 外层只负责暂存文件；备份的生命周期由publishStagedBundle管理。
 stageCleanup = onCleanup(@() deleteExisting(string(struct2cell(staged))));
 result.status = "complete";
 result.artifacts = artifacts;
+% MAT保留完整原始数组；CSV用于表格；FIG/PDF/PNG满足编辑、印刷和预览。
 save(staged.mat, 'result', '-v7.3');
 writetable(summaryTable, staged.csv);
 savefig(fig, staged.fig);
@@ -32,6 +36,7 @@ manifest = struct( ...
     'generatedAt', result.metadata.generatedAt, ...
     'artifacts', artifacts);
 writeJson(staged.log, manifest);
+% 只有六个暂存文件都存在时才进入最终发布阶段。
 uav.experiment.publishStagedBundle(staged, artifacts, backups);
 end
 
@@ -46,6 +51,7 @@ artifacts = struct( ...
 end
 
 function staged = stagingPaths(artifacts)
+% 临时文件与最终文件位于同一目录，使最终movefile保持同卷、快速且可控。
 fields = fieldnames(artifacts);
 staged = struct();
 for index = 1:numel(fields)

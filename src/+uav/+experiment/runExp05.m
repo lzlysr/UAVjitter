@@ -1,5 +1,7 @@
 function result = runExp05(cfg)
-%RUNEXP05 Run fixed one-switch-at-a-time temporal ablations.
+%RUNEXP05 实验5：执行固定的单模块时序方法消融。
+%   full为完整方法；其余变体依次改变lambdaT、谱对齐、自适应求积、结构
+%   增强或训练序列投影。runVariants会验证每个变体只改变声明字段。
 
 experimentTimer = tic;
 [cfg, calibration] = uav.experiment.prepare(cfg);
@@ -30,6 +32,7 @@ summaryTable = table(cfg.experiments.ablationNames.', ...
     'medianIncmNmse', 'medianRuntimeSec'});
 
 fig = uav.plot.newFigure(cfg);
+% 按配置顺序展示中位SINR和第5百分位，不按标签字母顺序重排。
 layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 ablationPositions = 1:variantCount;

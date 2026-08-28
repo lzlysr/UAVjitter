@@ -1,5 +1,7 @@
 function [structured, diagnostics] = projectStructure(R, cfg, applyEnhancement)
-%PROJECTSTRUCTURE Hermitianize and optionally floor/shrink a covariance.
+%PROJECTSTRUCTURE 将数值重构矩阵投影到稳定的协方差结构。
+%   处理顺序为：Hermitian化 -> 特征值下限 -> 各向同性收缩 -> 再次
+%   Hermitian化。applyEnhancement=false时只做必要的Hermitian化，用于消融。
 
 if nargin < 3
     applyEnhancement = true;
@@ -16,12 +18,14 @@ end
 
 [vectors, values] = eig(hermitian, 'vector');
 values = real(values);
+% 特征值下限按平均阵元功率缩放，使阈值不依赖绝对信号尺度。
 covarianceScale = max(real(trace(hermitian)) / M, eps);
 eigenvalueFloor = cfg.incm.eigenvalueFloorRatio * covarianceScale;
 values = max(values, eigenvalueFloor);
 structured = vectors * diag(values) * vectors';
 structured = (structured + structured') / 2;
 isotropicCovariance = real(trace(structured)) / M * eye(M);
+% 收缩到相同迹的各向同性矩阵，降低有限快拍下的条件数敏感性。
 structured = (1 - cfg.incm.shrinkage) * structured + ...
     cfg.incm.shrinkage * isotropicCovariance;
 structured = (structured + structured') / 2;

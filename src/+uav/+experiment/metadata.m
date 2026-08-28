@@ -1,5 +1,7 @@
 function metadata = metadata(cfg, experimentName, actualCounts, runtimeSec)
-%METADATA Capture reproducibility and environment metadata for one result.
+%METADATA 记录复现实验所需的代码、软件、随机性和规模信息。
+%   Git工作树若存在未提交修改，会在提交号后附加-dirty，避免把无法精确
+%   复现的结果误标为某个干净提交。actualCounts记录实际试次和周期数量。
 
 rootDir = cfg.output.rootDir;
 [commitStatus, commitText] = system(sprintf( ...
@@ -17,6 +19,7 @@ else
     end
 end
 toolboxData = ver;
+% 时间统一保存为UTC ISO-8601格式，避免不同计算机时区造成歧义。
 metadata = struct( ...
     'gitCommit', gitCommit, ...
     'matlabVersion', string(version), ...

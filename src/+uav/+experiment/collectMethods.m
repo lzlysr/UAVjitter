@@ -1,8 +1,12 @@
 function [raw, seeds] = collectMethods(cfg, experimentIndex, pointIndex, periodCount)
-%COLLECTMETHODS Generate paired observations and collect all six method metrics.
+%COLLECTMETHODS 生成配对观测并收集六种方法的原始指标。
+%   raw各字段尺寸为[试次×周期×方法]；snapshotSignatures额外有长度4的
+%   摘要维。seeds保存实际使用的场景和快拍子流，支持独立重建复核。
+%   “配对”表示同一试次、同一周期的六种方法只生成一次obs。
 
 trialCount = cfg.monteCarlo.nTrials;
 methodCount = numel(cfg.experiments.methodNames);
+% 不可用的INCM指标用NaN表示，Oracle/SCM/DL不伪造估计误差。
 raw = struct( ...
     'sinrLinear', zeros(trialCount, periodCount, methodCount), ...
     'desiredGain', zeros(trialCount, periodCount, methodCount), ...
@@ -16,6 +20,7 @@ seeds = struct( ...
     'scenarioSubstreams', zeros(trialCount, 1), ...
     'snapshotSubstreams', zeros(trialCount, periodCount));
 for trialIndex = 1:trialCount
+    % 每个试次只生成一条完整姿态轨迹，各周期在该轨迹上取对应状态。
     scenarioSubstream = uav.experiment.substream(cfg, experimentIndex, ...
         pointIndex, trialIndex, 0, "scenario");
     seeds.scenarioSubstreams(trialIndex) = scenarioSubstream;
@@ -23,6 +28,7 @@ for trialIndex = 1:trialCount
         uav.util.makeStream(cfg.random.baseSeed, scenarioSubstream));
     runnerState = [];
     for periodIndex = 1:periodCount
+        % 快拍子流按周期隔离，方法之间不重新抽取信号或噪声。
         snapshotSubstream = uav.experiment.substream(cfg, experimentIndex, ...
             pointIndex, trialIndex, periodIndex, "snapshot");
         seeds.snapshotSubstreams(trialIndex, periodIndex) = snapshotSubstream;
@@ -43,6 +49,7 @@ for trialIndex = 1:trialCount
             reshape(record.snapshotSignatures, 1, 1, methodCount, 4);
         if record.sinrLinear(1) + cfg.experiments.oracleTolerance < ...
                 max(record.sinrLinear(2:end))
+            % 相同真实INCM下，Oracle MVDR理论上不应劣于任意非Oracle权值。
             error('uav:experiment:OracleBoundViolation', ...
                 'Oracle SINR fell below a non-Oracle weight on the same truth.');
         end

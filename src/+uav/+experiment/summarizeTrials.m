@@ -1,5 +1,7 @@
 function summary = summarizeTrials(values, cfg, bootstrapSubstream)
-%SUMMARIZETRIALS Summarize trial-period data with paired trial-cluster bootstrap.
+%SUMMARIZETRIALS 使用配对“试次簇”bootstrap汇总动态实验数据。
+%   values维度为[试次×周期×方法]。同一试次内的周期来自同一姿态轨迹，
+%   不能当成独立样本，因此重采样完整试次，并保留该试次的全部周期。
 
 if ~isnumeric(values) || isempty(values) || ndims(values) > 3 || ...
         any(values(isfinite(values)) <= 0) || ...
@@ -16,12 +18,14 @@ periodCount = dimensions(2);
 groupCount = dimensions(3);
 values = reshape(values, trialCount, periodCount, groupCount);
 pooledValues = reshape(values, [], groupCount);
+% 点估计可使用全部观测值；置信区间的独立单位仍必须是试次。
 summary = pointEstimates(pooledValues, cfg);
 
 stream = uav.util.makeStream(cfg.random.baseSeed, bootstrapSubstream);
 replicateCount = cfg.experiments.bootstrapReplicates;
 bootstrapMedians = nan(replicateCount, groupCount);
 for replicate = 1:replicateCount
+    % 所有方法共享selectedTrials，维持成对比较关系。
     selectedTrials = randi(stream, trialCount, trialCount, 1);
     selectedValues = values(selectedTrials, :, :);
     for group = 1:groupCount
@@ -47,6 +51,7 @@ summary.periodsPerTrial = periodCount;
 end
 
 function summary = pointEstimates(values, cfg)
+% 只在线性域计算中位数、低分位和算术均值。
 groupCount = size(values, 2);
 medianLinear = nan(1, groupCount);
 lowLinear = nan(1, groupCount);

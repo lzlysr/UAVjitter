@@ -1,10 +1,14 @@
 function metrics = evaluate(w, truth, cfg)
-%EVALUATE Report output SINR and gain/leakage metrics against isolated truth.
+%EVALUATE 使用隔离真值统一计算波束形成性能指标。
+%   本函数是非Oracle算法可以间接使用真值的唯一评价位置之一：算法权值
+%   已经求出后，才把w与真实导向矢量、真实INCM结合。所有功率先在线性域
+%   计算；dB值只作为输出字段，蒙特卡洛统计仍使用sinrLinear。
 
 validateInputs(w, truth, cfg);
 desiredAsv = truth.trueASVs(:, 1);
 desiredGain = abs(w' * desiredAsv)^2;
 desiredOutputPower = truth.desiredPower * desiredGain;
+% 分母包含全部干扰和接收机噪声。
 interferencePlusNoisePower = real(w' * truth.trueIncm * w);
 if interferencePlusNoisePower <= 0
     error('uav:metrics:InvalidIncm', ...
@@ -12,6 +16,7 @@ if interferencePlusNoisePower <= 0
 end
 
 if isempty(truth.interfererPowers)
+    % J=0时“干扰泄漏”定义为0，但SINR分母仍包含噪声。
     interferenceLeakage = 0;
 else
     interfererAsvs = truth.trueASVs(:, 2:end);
@@ -27,6 +32,7 @@ metrics = struct( ...
     'desiredOutputPower', desiredOutputPower, ...
     'interferencePlusNoisePower', interferencePlusNoisePower);
 if isfield(truth, 'estimatedIncm')
+    % 只有INCM方法传入估计矩阵时才附加归一化Frobenius误差。
     estimate = truth.estimatedIncm;
     if ~isequal(size(estimate), size(truth.trueIncm)) || any(~isfinite(estimate), 'all')
         error('uav:metrics:InvalidIncmEstimate', ...

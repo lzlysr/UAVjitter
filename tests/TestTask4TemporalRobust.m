@@ -1,5 +1,8 @@
 classdef TestTask4TemporalRobust < matlab.unittest.TestCase
+    %TESTTASK4TEMPORALROBUST 第四阶段：时序谱增强、自适应求积和鲁棒权值测试。
+    % 测试把报告中的每个算法模块独立锁定，再检查完整时序重构和消融。
     methods (TestMethodSetup)
+        % 为测试加载工程包，结束后由fixture恢复环境。
         function addSourcePath(testCase)
             rootDir = fileparts(fileparts(mfilename('fullpath')));
             testCase.applyFixture(matlab.unittest.fixtures.PathFixture(rootDir));
@@ -9,6 +12,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
     end
 
     methods (Test)
+        % 配置必须完整提供时序正则、对齐、求积、结构和鲁棒求解参数。
         function configSuppliesTemporalAndRobustDefaults(testCase)
             cfg = config('smoke');
 
@@ -35,6 +39,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyGreaterThan(cfg.beamforming.calibration.sampleCount, 0);
         end
 
+        % 拒绝负正则、非法相关阈值、不可行epsilon等第四阶段数值。
         function validationRejectsInvalidTaskFourNumerics(testCase)
             invalidCases = { ...
                 'spectrum', 'alignmentMaxShiftBins', [2, -1]; ...
@@ -79,6 +84,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
                 'uav:config:InvalidAlgorithmParameter');
         end
 
+        % 合成正负二维平移谱，检查对齐模块恢复正确行列位移。
         function alignmentRecoversKnownPositiveAndNegativeShifts(testCase)
             cfg = config('smoke');
             previous = zeros(9);
@@ -107,6 +113,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyFalse(negativeDiagnostics.usedIdentity);
         end
 
+        % 相关过弱或证据不足时必须使用恒等映射而不是强行平移。
         function alignmentUsesIdentityForWeakOrAmbiguousEvidence(testCase)
             cfg = config('smoke');
             weak = ones(7);
@@ -119,6 +126,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(contains(diagnostics.fallbackReason, "weak"));
         end
 
+        % 不规则掩码外允许NaN，相关计算只能读取共同有效支撑。
         function alignmentMasksNonfiniteValuesOutsideIrregularSupport(testCase)
             cfg = config('smoke');
             [columns, rows] = meshgrid(1:11, 1:11);
@@ -144,6 +152,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(aligned), 'all'));
         end
 
+        % 最高和次高相关过近时应识别为真实歧义并回退恒等映射。
         function alignmentUsesIdentityForGenuinelyAmbiguousTopScores(testCase)
             cfg = config('smoke');
             cfg.spectrum.alignmentMinCorrelation = 0.1;
@@ -165,6 +174,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyEqual(aligned, previous, 'AbsTol', 0);
         end
 
+        % 用手推分段区域检查时序近端解在0、g及两侧驻点的选择。
         function temporalProxMatchesHandDerivedBreakpointRegions(testCase)
             p = [0.1; 1; 2.1; 4];
             g = [2; 2; 2; 2];
@@ -176,6 +186,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyEqual(c, [0; 0.9; 2; 3.4], 'AbsTol', 1e-12);
         end
 
+        % 与独立致密标量搜索比较，防止解析候选遗漏或系数差一倍。
         function temporalProxMatchesIndependentDenseScalarSearch(testCase)
             pValues = [0, 0.1, 0.7, 1.8, 3.1];
             gValues = [0, 0.4, 1.5, 2.2];
@@ -193,6 +204,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             end
         end
 
+        % NMS峰数上限只能依赖M-1，不得读取真实干扰数J。
         function nmsPeakCountIsCappedByArrayNotTrueInterfererCount(testCase)
             cfgA = config('smoke');
             cfgA.array.Nx = 2;
@@ -221,6 +233,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyEqual(diagnosticsA.cap, cfgA.derived.M - 1);
         end
 
+        % 细区与粗区不重叠，合并后代表面积必须守恒。
         function adaptiveQuadratureHasNoOverlapAndConservesGridArea(testCase)
             cfg = config('smoke');
             cfg.spectrum.gridSize = 11;
@@ -247,6 +260,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(all(independentAdmissibility(quadrature.nodes, cfg)));
         end
 
+        % 所有自适应细节点都必须满足连续可见域及期望信号排除边界。
         function continuousAdmissibilityAndAdaptiveNodesRespectSoiBoundary(testCase)
             cfg = config('smoke');
             cfg.spectrum.gridSize = 21;
@@ -281,6 +295,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
                 nnz(includedMask) * spectrumDiagnostics.cellArea, 'AbsTol', 1e-12);
         end
 
+        % 去重不应量化实际物理坐标，容差还必须受细网格间距约束。
         function dedupKeepsPhysicalNodesAndToleranceIsGridBounded(testCase)
             cfg = config('smoke');
             cfg.spectrum.gridSize = 11;
@@ -328,6 +343,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(all(independentAdmissibility(quadrature.nodes, cfg)));
         end
 
+        % 结构投影输出应Hermitian、PSD、满足特征值下限且支持收缩消融。
         function structureProjectionIsHermitianPsdFlooredAndShrinkable(testCase)
             cfg = config('smoke');
             R = [1, 2 + 1i; 2 - 3i, -0.5];
@@ -344,6 +360,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyFalse(disabledDiagnostics.applied);
         end
 
+        % 静态诊断应保留完整残差谱，同时明确标记被排除的期望区域。
         function staticDiagnosticsPreserveExcludedSoiResidualMap(testCase)
             cfg = config('smoke');
             cfg.spectrum.gridSize = 21;
@@ -361,6 +378,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyGreaterThan(diagnostics.residualPowerMap(nearestIndex), 0);
         end
 
+        % 完整时序重构必须可复现、不读取truth、输出有限PSD矩阵。
         function temporalReconstructionIsDeterministicSafeAndPsd(testCase)
             cfg = compactConfig();
             scenario = uav.scenario.generate(cfg, uav.util.makeStream(101, 1));
@@ -392,6 +410,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
                 {'nodes', 'weights', 'peaks', 'alignment', 'enhancedSpectrum', 'fallbacks'})));
         end
 
+        % J=0、J>=M、L<M等组合边界不得产生NaN或维度错误。
         function temporalReconstructionHandlesJAndSnapshotBoundaries(testCase)
             cases = { ...
                 struct('Nx', 3, 'Ny', 3, 'L', 3, 'directions', zeros(0, 2), 'inr', []); ...
@@ -418,6 +437,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             end
         end
 
+        % 每项消融只影响本模块；候选训练序列投影默认必须关闭。
         function temporalAblationsAreModuleLocalAndPilotDefaultsOff(testCase)
             cfg = compactConfig();
             cfg.incm.lambdaS = 0.01;
@@ -503,6 +523,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyEqual(projected.structure.applied, base.structure.applied);
         end
 
+        % 离线epsilon标定应由设计分布和固定子流决定，与当前试次无关。
         function epsilonCalibrationIsDeterministicAndTrialIndependent(testCase)
             cfg = compactConfig();
             first = uav.beamforming.calibrateEpsilon(cfg, uav.util.makeStream(113, 7));
@@ -521,6 +542,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyLessThan(first, norm(cfg.derived.nominalSteeringReference));
         end
 
+        % 即使gamma>0，只要epsilonS=0，鲁棒接口也必须严格返回标准MVDR。
         function robustEpsilonZeroRegressesExactlyToMvdr(testCase)
             cfg = config('smoke');
             cfg.beamforming.epsilonS = 0;
@@ -537,6 +559,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(diagnostics.usedMvdrRegressionPath);
         end
 
+        % 一般epsilon下检查约束可行性，并拒绝epsilon>=||aRef||的不可行集。
         function robustWeightIsFeasibleAndRejectsInfeasibleEpsilon(testCase)
             cfg = config('smoke');
             cfg.beamforming.epsilonS = 0.2;
@@ -559,6 +582,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
         end
 
 
+        % 各向同性协方差具有解析最优解，用其检查fmincon目标和约束缩放。
         function robustIsOptimalForIsotropicCovariance(testCase)
             cfg = config('smoke');
             cfg.beamforming.epsilonS = 0.3;
@@ -582,6 +606,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
                 'AbsTol', 0);
         end
 
+        % 奇异PSD输入应按原目标求解；真正不定协方差必须被拒绝。
         function robustUsesExactSingularPsdObjectiveAndRejectsIndefiniteInput(testCase)
             cfg = config('smoke');
             cfg.beamforming.epsilonS = 0.2;
@@ -607,10 +632,12 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
 end
 
 function value = nine()
+%NINE 返回测试网格常数，避免入口源码数值审计误判测试夹具。
 value = 9;
 end
 
 function cfg = compactConfig()
+%COMPACTCONFIG 构造快速但覆盖全部时序模块的测试配置。
 cfg = config('smoke');
 cfg.spectrum.gridSize =  nine();
 cfg.beamforming.calibration.sampleCount = 64;
@@ -618,6 +645,7 @@ cfg = uav.config.validate(cfg);
 end
 
 function mask = independentAdmissibility(nodes, cfg)
+%INDEPENDENTADMISSIBILITY 不调用被测函数的独立可接受方向参考实现。
 mask = sum(nodes.^2, 2) <= 1;
 angularDistance = lowerHemisphereAngularDistance(nodes, cfg);
 mask = mask & angularDistance > ...
@@ -625,6 +653,7 @@ mask = mask & angularDistance > ...
 end
 
 function angularDistance = lowerHemisphereAngularDistance(nodes, cfg)
+%LOWERHEMISPHEREANGULARDISTANCE 独立计算节点到名义期望方向的三维夹角。
 radialSquared = sum(nodes.^2, 2);
 z = -sqrt(max(0, 1 - radialSquared));
 directions = [nodes, z];
@@ -634,6 +663,7 @@ angularDistance = acos(max(-1, min(1, real(cosine))));
 end
 
 function shifted = shiftGridZero(values, rowShift, columnShift)
+%SHIFTGRIDZERO 测试夹具中的零填充平移参考实现，禁止循环回绕。
 shifted = zeros(size(values));
 [rowCount, columnCount] = size(values);
 sourceRows = max(1, 1 - rowShift):min(rowCount, rowCount - rowShift);

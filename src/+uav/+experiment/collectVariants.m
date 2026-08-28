@@ -1,6 +1,8 @@
 function [raw, seeds, switchDiagnostics] = collectVariants( ...
         cfg, experimentIndex, periodCount)
-%COLLECTVARIANTS Generate paired observations for the fixed temporal ablations.
+%COLLECTVARIANTS 在相同观测上收集六个时序算法消融变体。
+%   每个变体拥有独立的上一周期算法状态，但共享场景、快拍和离线标定
+%   epsilonS。switchDiagnostics记录实际改变的字段，便于证明单变量消融。
 
 trialCount = cfg.monteCarlo.nTrials;
 variantCount = numel(cfg.experiments.ablationNames);
@@ -38,6 +40,7 @@ for trialIndex = 1:trialCount
         raw.snapshotSignatures(trialIndex, periodIndex, :, :) = ...
             reshape(record.snapshotSignatures, 1, 1, variantCount, 4);
         if trialIndex == 1 && periodIndex == 1
+            % 配置差异在所有试次相同，只需记录第一组即可。
             switchDiagnostics = struct( ...
                 'variantNames', record.variantNames, ...
                 'switchDeltaFields', record.switchDeltaFields, ...
