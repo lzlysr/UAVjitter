@@ -1,49 +1,226 @@
 function [RinHat, nextState, diagnostics] = reconstruct(method, obs, priorState, cfg)
-%RECONSTRUCT Estimate a static interference-plus-noise covariance matrix.
+%RECONSTRUCT Estimate static or temporal interference-plus-noise covariance.
 
 method = lower(string(method));
-if method ~= "static"
-    error('uav:incm:UnsupportedMethod', ...
-        'Task 3 supports only the "static" INCM reconstruction method.');
-end
 validateInputs(obs, cfg);
-priorState = priorState; %#ok<NASGU>
+switch method
+    case "static"
+        [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg);
+    case "temporal"
+        [RinHat, nextState, diagnostics] = reconstructTemporal(obs, priorState, cfg);
+    otherwise
+        error('uav:incm:UnsupportedMethod', ...
+            'Supported INCM reconstruction methods are "static" and "temporal".');
+end
+end
 
-[powerMap, spectrumDiagnostics] = uav.spectrum.loadedCapon(obs.Rx, cfg);
+function [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg)
+[prepared, commonDiagnostics] = prepareSpectrum(obs, cfg, false);
+quadrature = uniformQuadrature(prepared.residualPowerMap, ...
+    prepared.spectrum, prepared.includedMask);
+rawIncm = reconstructFromQuadrature(quadrature, prepared.noiseEstimate, cfg);
+[RinHat, structureDiagnostics] = uav.incm.projectStructure(rawIncm, cfg, true);
+nextState = struct('method', "static");
+diagnostics = commonOutputDiagnostics(prepared, commonDiagnostics, ...
+    structureDiagnostics);
+diagnostics.usedPowerMap = prepared.residualPowerMap;
+diagnostics.eigenvalueFloor = structureDiagnostics.eigenvalueFloor;
+end
+
+function [RinHat, nextState, diagnostics] = reconstructTemporal(obs, priorState, cfg)
+applyPilotProjection = cfg.incm.ablation.pilotProjection;
+[prepared, commonDiagnostics] = prepareSpectrum(obs, cfg, applyPilotProjection);
+[alignedPrevious, alignmentDiagnostics] = alignPrior( ...
+    prepared.residualPowerMap, prepared.includedMask, priorState, cfg);
+if cfg.incm.ablation.temporalContinuity
+    effectiveLambdaT = cfg.incm.lambdaT;
+else
+    effectiveLambdaT = 0;
+end
+enhancedSpectrum = zeros(size(prepared.residualPowerMap));
+enhancedSpectrum(prepared.includedMask) = uav.incm.temporalProx( ...
+    prepared.residualPowerMap(prepared.includedMask), ...
+    alignedPrevious(prepared.includedMask), cfg.incm.lambdaS, effectiveLambdaT);
+[peaks, peakDiagnostics] = uav.spectrum.selectPeaks(enhancedSpectrum, ...
+    prepared.spectrum, prepared.includedMask, cfg);
+if cfg.incm.ablation.adaptiveQuadrature
+    quadrature = uav.spectrum.adaptiveQuadrature(enhancedSpectrum, ...
+        prepared.spectrum, prepared.includedMask, peakDiagnostics.linearIndices, cfg);
+    quadratureMode = "adaptive";
+else
+    quadrature = uniformQuadrature(enhancedSpectrum, ...
+        prepared.spectrum, prepared.includedMask);
+    quadratureMode = "uniform";
+end
+rawIncm = reconstructFromQuadrature(quadrature, prepared.noiseEstimate, cfg);
+[RinHat, structureDiagnostics] = uav.incm.projectStructure(rawIncm, cfg, ...
+    cfg.incm.ablation.structureEnhancement);
+
+fallbacks = struct( ...
+    'alignment', alignmentDiagnostics.fallbackReason, ...
+    'noiseEstimate', commonDiagnostics.noise.source, ...
+    'quadrature', quadratureMode);
+nextState = struct( ...
+    'enhancedSpectrum', enhancedSpectrum, ...
+    'xiX', prepared.spectrum.xiX, ...
+    'xiY', prepared.spectrum.xiY, ...
+    'includedMask', prepared.includedMask, ...
+    'alignment', alignmentDiagnostics, ...
+    'diagnostics', fallbacks);
+diagnostics = commonOutputDiagnostics(prepared, commonDiagnostics, ...
+    structureDiagnostics);
+diagnostics.usedPowerMap = enhancedSpectrum;
+diagnostics.enhancedSpectrum = enhancedSpectrum;
+diagnostics.alignedPreviousSpectrum = alignedPrevious;
+diagnostics.effectiveLambdaT = effectiveLambdaT;
+diagnostics.peaks = peaks;
+diagnostics.peakSelection = peakDiagnostics;
+diagnostics.nodes = quadrature.nodes;
+diagnostics.weights = quadrature.weights;
+diagnostics.quadrature = quadrature.diagnostics;
+diagnostics.quadratureMode = quadratureMode;
+diagnostics.alignment = alignmentDiagnostics;
+diagnostics.fallbacks = fallbacks;
+diagnostics.rawIncm = rawIncm;
+diagnostics.eigenvalueFloor = structureDiagnostics.eigenvalueFloor;
+end
+
+function [prepared, diagnostics] = prepareSpectrum(obs, cfg, applyPilotProjection)
+[spectrumInputCovariance, projectionDiagnostics] = spectrumCovariance( ...
+    obs, cfg, applyPilotProjection);
+spectrumObservation = obs;
+spectrumObservation.Rx = spectrumInputCovariance;
+[powerMap, spectrumDiagnostics] = uav.spectrum.loadedCapon( ...
+    spectrumInputCovariance, cfg);
 includedMask = nonSoiVisibleMask(spectrumDiagnostics, cfg);
+[noiseEstimate, noiseDiagnostics] = estimateNoisePower(spectrumObservation, cfg);
 M = cfg.derived.M;
-[noiseEstimate, noiseDiagnostics] = estimateNoisePower(obs, cfg);
 pedestalPower = (noiseEstimate + spectrumDiagnostics.loading) / M;
-residualPowerMap = powerMap;
+residualPowerMap = zeros(size(powerMap));
 residualPowerMap(spectrumDiagnostics.visibleMask) = max( ...
     powerMap(spectrumDiagnostics.visibleMask) - pedestalPower, 0);
-signalCovariance = zeros(M);
-for linearIndex = find(includedMask).'
-    a = uav.array.steeringUPA([spectrumDiagnostics.xiX(linearIndex); ...
-        spectrumDiagnostics.xiY(linearIndex)], cfg.array.Nx, cfg.array.Ny, ...
-        cfg.array.spacingOverLambda);
-    signalCovariance = signalCovariance + spectrumDiagnostics.cellArea * ...
-        residualPowerMap(linearIndex) * (a * a');
-end
-
-rawIncm = signalCovariance + noiseEstimate * eye(M);
-[RinHat, eigenvalueFloor] = enforceStructure(rawIncm, cfg);
-nextState = struct('method', "static");
-diagnostics = struct( ...
-    'rawPowerMap', powerMap, ...
-    'residualPowerMap', residualPowerMap, ...
-    'usedPowerMap', residualPowerMap, ...
+prepared = struct( ...
     'powerMap', powerMap, ...
+    'residualPowerMap', residualPowerMap, ...
     'spectrum', spectrumDiagnostics, ...
     'includedMask', includedMask, ...
-    'excludedSoiMask', spectrumDiagnostics.visibleMask & ~includedMask, ...
     'noiseEstimate', noiseEstimate, ...
+    'pedestalPower', pedestalPower, ...
+    'spectrumInputCovariance', spectrumInputCovariance);
+diagnostics = struct('noise', noiseDiagnostics, 'projection', projectionDiagnostics);
+end
+
+function [Rx, diagnostics] = spectrumCovariance(obs, cfg, applyProjection)
+if ~applyProjection
+    Rx = obs.Rx;
+    diagnostics = struct('applied', false, 'removedPilotEnergy', 0);
+    return;
+end
+if ~isfield(obs, 'X') || ~isfield(obs, 'pilot') || isempty(obs.X) || isempty(obs.pilot) || ...
+        size(obs.X, 2) ~= numel(obs.pilot)
+    error('uav:incm:MissingPilotData', ...
+        'Pilot projection requires matching obs.X and obs.pilot samples.');
+end
+pilot = reshape(obs.pilot, 1, []);
+pilotEnergy = real(pilot * pilot');
+if ~isfinite(pilotEnergy) || pilotEnergy <= 0
+    error('uav:incm:InvalidPilot', 'obs.pilot must have positive finite energy.');
+end
+pilotComponent = (obs.X * pilot') / pilotEnergy * pilot;
+projectedSnapshots = obs.X - pilotComponent;
+Rx = projectedSnapshots * projectedSnapshots' / size(projectedSnapshots, 2);
+Rx = (Rx + Rx') / 2;
+diagnostics = struct( ...
+    'applied', true, ...
+    'removedPilotEnergy', norm(pilotComponent, 'fro')^2 / size(projectedSnapshots, 2), ...
+    'snapshotCount', size(projectedSnapshots, 2), ...
+    'arraySize', cfg.derived.M);
+end
+
+function [alignedPrevious, diagnostics] = alignPrior(currentMap, includedMask, priorState, cfg)
+if isempty(priorState) || ~isstruct(priorState) || ...
+        ~isfield(priorState, 'enhancedSpectrum')
+    alignedPrevious = zeros(size(currentMap));
+    diagnostics = identityAlignment("no-prior");
+    return;
+end
+previous = priorState.enhancedSpectrum;
+if ~isequal(size(previous), size(currentMap)) || ...
+        any(~isfinite(previous), 'all') || any(previous < 0, 'all')
+    alignedPrevious = zeros(size(currentMap));
+    diagnostics = identityAlignment("invalid-prior");
+    return;
+end
+previous(~includedMask) = 0;
+if ~cfg.incm.ablation.alignment
+    alignedPrevious = previous;
+    diagnostics = identityAlignment("disabled");
+    return;
+end
+[alignedPrevious, diagnostics] = uav.spectrum.align2D( ...
+    currentMap, previous, includedMask, cfg);
+end
+
+function diagnostics = identityAlignment(reason)
+diagnostics = struct( ...
+    'shiftBins', [0, 0], ...
+    'bestCorrelation', NaN, ...
+    'secondCorrelation', NaN, ...
+    'usedIdentity', true, ...
+    'fallbackReason', string(reason), ...
+    'candidateShifts', zeros(0, 2), ...
+    'candidateCorrelations', zeros(0, 1));
+end
+
+function quadrature = uniformQuadrature(powerMap, spectrumDiagnostics, includedMask)
+linearIndices = find(includedMask);
+quadrature = struct( ...
+    'nodes', [spectrumDiagnostics.xiX(linearIndices), ...
+        spectrumDiagnostics.xiY(linearIndices)], ...
+    'weights', spectrumDiagnostics.cellArea * ones(numel(linearIndices), 1), ...
+    'values', powerMap(linearIndices), ...
+    'diagnostics', struct( ...
+        'mode', "uniform", ...
+        'fineCellCount', 0, ...
+        'coarseCellCount', numel(linearIndices), ...
+        'fineNodeCount', 0, ...
+        'coarseNodeCount', numel(linearIndices), ...
+        'representedArea', numel(linearIndices) * spectrumDiagnostics.cellArea));
+end
+
+function R = reconstructFromQuadrature(quadrature, noiseEstimate, cfg)
+M = cfg.derived.M;
+signalCovariance = zeros(M);
+for index = 1:size(quadrature.nodes, 1)
+    a = uav.array.steeringUPA(quadrature.nodes(index, :).', ...
+        cfg.array.Nx, cfg.array.Ny, cfg.array.spacingOverLambda);
+    signalCovariance = signalCovariance + quadrature.weights(index) * ...
+        quadrature.values(index) * (a * a');
+end
+R = signalCovariance + noiseEstimate * eye(M);
+R = (R + R') / 2;
+end
+
+function diagnostics = commonOutputDiagnostics(prepared, commonDiagnostics, structureDiagnostics)
+spectrumDiagnostics = prepared.spectrum;
+noiseDiagnostics = commonDiagnostics.noise;
+diagnostics = struct( ...
+    'rawPowerMap', prepared.powerMap, ...
+    'residualPowerMap', prepared.residualPowerMap, ...
+    'powerMap', prepared.powerMap, ...
+    'spectrum', spectrumDiagnostics, ...
+    'includedMask', prepared.includedMask, ...
+    'excludedSoiMask', spectrumDiagnostics.visibleMask & ~prepared.includedMask, ...
+    'noiseEstimate', prepared.noiseEstimate, ...
     'noiseFloor', noiseDiagnostics.noiseFloor, ...
     'effectiveSnapshotCount', noiseDiagnostics.effectiveSnapshotCount, ...
     'effectiveRank', noiseDiagnostics.effectiveRank, ...
     'noiseEstimateSource', noiseDiagnostics.source, ...
-    'pedestalPower', pedestalPower, ...
-    'eigenvalueFloor', eigenvalueFloor);
+    'pedestalPower', prepared.pedestalPower, ...
+    'structure', structureDiagnostics, ...
+    'pilotProjectionApplied', commonDiagnostics.projection.applied, ...
+    'pilotProjection', commonDiagnostics.projection, ...
+    'spectrumInputCovariance', prepared.spectrumInputCovariance);
 end
 
 function validateInputs(obs, cfg)
@@ -52,7 +229,7 @@ if ~isstruct(obs) || ~isfield(obs, 'Rx')
 end
 if ~isstruct(cfg) || ~isfield(cfg, 'derived') || ~isfield(cfg, 'incm') || ...
         ~isfield(cfg, 'spectrum') || ~isfield(cfg, 'array')
-    error('uav:incm:InvalidConfiguration', 'cfg is missing static INCM fields.');
+    error('uav:incm:InvalidConfiguration', 'cfg is missing INCM fields.');
 end
 M = cfg.derived.M;
 if ~isequal(size(obs.Rx), [M, M]) || any(~isfinite(obs.Rx), 'all')
@@ -94,8 +271,7 @@ elseif snapshotCount < M
     noiseEstimate = cfg.signal.noisePower;
     source = "configured-underdetermined";
 elseif isempty(nonzeroEigenvalues)
-    lowerEstimate = 0;
-    noiseEstimate = max(lowerEstimate, noiseFloor);
+    noiseEstimate = noiseFloor;
     source = "lower-eigenvalues";
 else
     lowerCount = max(1, ceil(cfg.spectrum.noiseEigenvalueFraction * ...
@@ -118,20 +294,4 @@ if hasSnapshots
 else
     snapshotCount = 0;
 end
-end
-
-function [structured, eigenvalueFloor] = enforceStructure(R, cfg)
-M = size(R, 1);
-R = (R + R') / 2;
-[vectors, values] = eig(R, 'vector');
-values = real(values);
-covarianceScale = max(real(trace(R)) / M, eps);
-eigenvalueFloor = cfg.incm.eigenvalueFloorRatio * covarianceScale;
-values = max(values, eigenvalueFloor);
-structured = vectors * diag(values) * vectors';
-structured = (structured + structured') / 2;
-isotropicCovariance = real(trace(structured)) / M * eye(M);
-structured = (1 - cfg.incm.shrinkage) * structured + ...
-    cfg.incm.shrinkage * isotropicCovariance;
-structured = (structured + structured') / 2;
 end
