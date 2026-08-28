@@ -47,7 +47,7 @@ matlab -batch "cd('D:\workspace\UAVjitter'); startup; run_all('smoke')"
 
 ## 3. MATLAB 目录名前为什么有“+”
 
-`src` 下的 `+uav`、`+array`、`+scenario` 等目录使用了 MATLAB 的包目录语法。目录名前的加号不是普通文件名装饰，而是 MATLAB 用来声明命名空间的固定规则。
+`src/+uav` 以及其下的 `+array`、`+scenario` 等目录使用了 MATLAB 的包目录语法。目录名前的加号不是普通文件名装饰，而是 MATLAB 用来声明命名空间的固定规则。
 
 例如文件：
 
@@ -164,7 +164,7 @@ D:\workspace\UAVjitter\
 
 ### 8.2 `+geometry`：坐标系与姿态旋转
 
-- `rotationZYX.m`：按照 `Rz(yaw)Ry(pitch)Rx(roll)` 生成世界坐标系到机体姿态所需的三维旋转矩阵，并检查输入维度。
+- `rotationZYX.m`：按照 `Rz(yaw)Ry(pitch)Rx(roll)` 生成阵列/机体系到世界坐标系的三维旋转矩阵，即满足 `v_world=R*v_array`，并检查输入维度。
 - `worldToArray.m`：利用旋转矩阵的转置，把世界坐标系中的固定单位方向转换到当前阵列坐标系。
 - `directionCoordinates.m`：从三维阵列坐标方向提取二维方向余弦，并计算用于展示和诊断的方位角、俯仰角。
 
