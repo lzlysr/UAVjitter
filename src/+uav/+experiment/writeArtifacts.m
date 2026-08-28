@@ -17,8 +17,7 @@ end
 
 staged = stagingPaths(artifacts);
 backups = stagingPaths(artifacts);
-stageCleanup = onCleanup(@() deleteExisting([string(struct2cell(staged)); ...
-    string(struct2cell(backups))]));
+stageCleanup = onCleanup(@() deleteExisting(string(struct2cell(staged))));
 result.status = "complete";
 result.artifacts = artifacts;
 save(staged.mat, 'result', '-v7.3');

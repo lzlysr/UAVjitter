@@ -288,6 +288,69 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyFalse(any(isfile(string(struct2cell(backups)))));
         end
 
+        function postCommitBackupCleanupFailureKeepsNewBundle(testCase)
+            root = tempname;
+            mkdir(root);
+            testCase.addTeardown(@() cleanupDir(root));
+            staged = struct( ...
+                'a', string(fullfile(root, 'stage-a.txt')), ...
+                'b', string(fullfile(root, 'stage-b.txt')));
+            artifacts = struct( ...
+                'a', string(fullfile(root, 'final-a.txt')), ...
+                'b', string(fullfile(root, 'final-b.txt')));
+            backups = struct( ...
+                'a', string(fullfile(root, 'backup-a.txt')), ...
+                'b', string(fullfile(root, 'backup-b.txt')));
+            writeText(staged.a, 'new-a');
+            writeText(staged.b, 'new-b');
+            writeText(artifacts.a, 'old-a');
+            writeText(artifacts.b, 'old-b');
+            operations = struct( ...
+                'move', @moveTestFile, ...
+                'delete', @(pathValue) deleteWithFailure( ...
+                pathValue, backups.b));
+
+            testCase.verifyWarning(@() uav.experiment.publishStagedBundle( ...
+                staged, artifacts, backups, operations), ...
+                'uav:experiment:BackupCleanupFailure');
+
+            testCase.verifyEqual(string(fileread(artifacts.a)), "new-a");
+            testCase.verifyEqual(string(fileread(artifacts.b)), "new-b");
+            testCase.verifyFalse(isfile(backups.a));
+            testCase.verifyEqual(string(fileread(backups.b)), "old-b");
+            testCase.verifyFalse(any(isfile(string(struct2cell(staged)))));
+        end
+
+        function failedRollbackPreservesRecoverableBackup(testCase)
+            root = tempname;
+            mkdir(root);
+            testCase.addTeardown(@() cleanupDir(root));
+            staged = struct( ...
+                'a', string(fullfile(root, 'stage-a.txt')), ...
+                'b', string(fullfile(root, 'stage-b.txt')));
+            artifacts = struct( ...
+                'a', string(fullfile(root, 'final-a.txt')), ...
+                'b', string(fullfile(root, 'missing', 'final-b.txt')));
+            backups = struct( ...
+                'a', string(fullfile(root, 'backup-a.txt')), ...
+                'b', string(fullfile(root, 'backup-b.txt')));
+            writeText(staged.a, 'new-a');
+            writeText(staged.b, 'new-b');
+            writeText(artifacts.a, 'old-a');
+            operations = struct( ...
+                'move', @(source, destination) moveWithRestoreFailure( ...
+                source, destination, backups.a), ...
+                'delete', @deleteTestFile);
+
+            testCase.verifyError(@() uav.experiment.publishStagedBundle( ...
+                staged, artifacts, backups, operations), ...
+                'uav:experiment:ArtifactRollbackFailure');
+
+            testCase.verifyFalse(isfile(artifacts.a));
+            testCase.verifyEqual(string(fileread(backups.a)), "old-a");
+            testCase.verifyFalse(any(isfile(string(struct2cell(staged)))));
+        end
+
         function fiveSmokeEntrypointsProduceEveryArtifactType(testCase)
             cfg = compactConfig(testCase);
             configuredRoot = string(cfg.output.rootDir);
@@ -433,4 +496,30 @@ if fileId < 0
 end
 cleanup = onCleanup(@() fclose(fileId));
 fwrite(fileId, value, 'char');
+end
+
+function moveTestFile(source, destination)
+[moved, message] = movefile(source, destination, 'f');
+if ~moved
+    error('uav:experiment:ArtifactPublishFailure', ...
+        'Could not publish %s: %s', destination, message);
+end
+end
+
+function moveWithRestoreFailure(source, destination, failingSource)
+if string(source) == string(failingSource)
+    error('uav:test:InjectedRestoreFailure', 'Injected restore failure.');
+end
+moveTestFile(source, destination);
+end
+
+function deleteWithFailure(pathValue, failingPath)
+if string(pathValue) == string(failingPath)
+    error('uav:test:InjectedCleanupFailure', 'Injected cleanup failure.');
+end
+deleteTestFile(pathValue);
+end
+
+function deleteTestFile(pathValue)
+delete(pathValue);
 end
