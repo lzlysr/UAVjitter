@@ -10,7 +10,8 @@ end
 startup;
 cfg = config(profile);
 rootDir = cfg.output.rootDir;
-result = struct('profile', cfg.profile, 'tests', [], 'experiments', strings(0, 1));
+result = struct('profile', cfg.profile, 'tests', [], ...
+    'experiments', strings(0, 1), 'artifacts', {cell(0, 1)});
 
 if options.RunTests
     result.tests = runtests(fullfile(rootDir, 'tests'), 'IncludeSubfolders', true);
@@ -18,13 +19,11 @@ if options.RunTests
 end
 
 if options.RunExperiments
-    experimentFiles = dir(fullfile(rootDir, 'experiments', 'experiment_*.m'));
-    [~, order] = sort({experimentFiles.name});
-    experimentFiles = experimentFiles(order);
-    for index = 1:numel(experimentFiles)
-        [~, entryPoint] = fileparts(experimentFiles(index).name);
-        feval(entryPoint, cfg);
-        result.experiments(end + 1, 1) = string(entryPoint); %#ok<AGROW>
+    entryPoints = uav.experiment.entryPoints();
+    for index = 1:numel(entryPoints)
+        experimentResult = feval(entryPoints(index), cfg);
+        result.experiments(end + 1, 1) = entryPoints(index);
+        result.artifacts{end + 1, 1} = experimentResult.artifacts;
     end
 end
 end

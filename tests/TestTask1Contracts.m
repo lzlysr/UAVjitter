@@ -64,6 +64,17 @@ classdef TestTask1Contracts < matlab.unittest.TestCase
             smoke.spectrum.gridSize = [];
             preliminary.spectrum.gridSize = [];
             paper.spectrum.gridSize = [];
+            workloadExperimentFields = {'modelValidation', 'jitterSweep', ...
+                'snapshotSweep', 'dynamicStability', 'ablation'};
+            for index = 1:numel(workloadExperimentFields)
+                field = workloadExperimentFields{index};
+                smoke.experiments.periodCounts.(field) = [];
+                preliminary.experiments.periodCounts.(field) = [];
+                paper.experiments.periodCounts.(field) = [];
+            end
+            smoke.experiments.bootstrapReplicates = [];
+            preliminary.experiments.bootstrapReplicates = [];
+            paper.experiments.bootstrapReplicates = [];
             testCase.verifyEqual(smoke, preliminary);
             testCase.verifyEqual(preliminary, paper);
         end
