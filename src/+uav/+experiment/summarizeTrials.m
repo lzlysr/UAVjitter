@@ -15,8 +15,8 @@ trialCount = dimensions(1);
 periodCount = dimensions(2);
 groupCount = dimensions(3);
 values = reshape(values, trialCount, periodCount, groupCount);
-summary = uav.experiment.summarizeLinear(reshape(values, [], groupCount), ...
-    cfg, bootstrapSubstream);
+pooledValues = reshape(values, [], groupCount);
+summary = pointEstimates(pooledValues, cfg);
 
 stream = uav.util.makeStream(cfg.random.baseSeed, bootstrapSubstream);
 replicateCount = cfg.experiments.bootstrapReplicates;
@@ -40,9 +40,43 @@ for group = 1:groupCount
     end
 end
 summary.ci95Db = linearToDb(summary.ci95Linear);
+summary.bootstrapSubstream = bootstrapSubstream;
 summary.bootstrapUnit = "trial";
 summary.independentTrialCount = trialCount;
 summary.periodsPerTrial = periodCount;
+end
+
+function summary = pointEstimates(values, cfg)
+groupCount = size(values, 2);
+medianLinear = nan(1, groupCount);
+lowLinear = nan(1, groupCount);
+meanLinear = nan(1, groupCount);
+validCounts = zeros(1, groupCount);
+for group = 1:groupCount
+    finiteValues = values(isfinite(values(:, group)), group);
+    validCounts(group) = numel(finiteValues);
+    if isempty(finiteValues)
+        continue;
+    end
+    medianLinear(group) = quantile(finiteValues, ...
+        cfg.experiments.aggregation.medianQuantile);
+    lowLinear(group) = quantile(finiteValues, ...
+        cfg.experiments.aggregation.lowQuantile);
+    meanLinear(group) = sum(finiteValues) / numel(finiteValues);
+end
+summary = struct( ...
+    'medianLinear', medianLinear, ...
+    'lowLinear', lowLinear, ...
+    'meanLinear', meanLinear, ...
+    'ci95Linear', nan(2, groupCount), ...
+    'medianDb', linearToDb(medianLinear), ...
+    'lowDb', linearToDb(lowLinear), ...
+    'meanDb', linearToDb(meanLinear), ...
+    'ci95Db', nan(2, groupCount), ...
+    'validCounts', validCounts, ...
+    'bootstrapSubstream', NaN, ...
+    'bootstrapReplicates', cfg.experiments.bootstrapReplicates, ...
+    'aggregationDomain', "linear");
 end
 
 function valuesDb = linearToDb(values)

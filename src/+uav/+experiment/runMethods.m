@@ -30,6 +30,7 @@ incmConditionNumber = nan(1, methodCount);
 weights = complex(zeros(cfg.derived.M, methodCount));
 diagnostics = cell(1, methodCount);
 aRef = cfg.derived.nominalSteeringReference;
+algorithmObservation = rmfield(obs, 'truth');
 
 for methodIndex = 1:methodCount
     methodTimer = tic;
@@ -64,14 +65,15 @@ for methodIndex = 1:methodCount
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
         case "static"
             [estimatedIncm, ~, reconstructionDiagnostics] = ...
-                uav.incm.reconstruct("static", obs, [], cfg);
+                uav.incm.reconstruct("static", algorithmObservation, [], cfg);
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "robust", estimatedIncm, aRef, cfg);
             methodDiagnostics = struct('reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
         case "temporal"
             [estimatedIncm, priorState.temporalState, reconstructionDiagnostics] = ...
-                uav.incm.reconstruct("temporal", obs, priorState.temporalState, cfg);
+                uav.incm.reconstruct("temporal", algorithmObservation, ...
+                priorState.temporalState, cfg);
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "robust", estimatedIncm, aRef, cfg);
             methodDiagnostics = struct('reconstruction', reconstructionDiagnostics, ...

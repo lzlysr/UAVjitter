@@ -41,6 +41,10 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 invalid.experiments.substreams.snapshotOffset;
             testCase.verifyError(@() uav.config.validate(invalid), ...
                 'uav:config:InvalidExperimentParameter');
+            invalid = cfg;
+            invalid.plot.saveFigures = false;
+            testCase.verifyError(@() uav.config.validate(invalid), ...
+                'uav:config:InvalidExperimentParameter');
         end
 
         function linearAggregationAndBootstrapAreDeterministic(testCase)
@@ -74,6 +78,20 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyEqual(summary.ci95Db(:, 2) - ...
                 summary.ci95Db(:, 1), 10 * log10(4) * ones(2, 1), ...
                 'AbsTol', 1e-12);
+        end
+
+        function paperSizedAggregationDoesNotBootstrapIndividualPeriods(testCase)
+            cfg = config('paper');
+            cfg.experiments.bootstrapReplicates = 2;
+            cfg = uav.config.validate(cfg);
+            values = ones(cfg.monteCarlo.nTrials, cfg.timeline.K, 2);
+            values(:, :, 2) = 2;
+
+            summary = uav.experiment.summarizeTrials(values, cfg, 75);
+
+            testCase.verifyEqual(summary.independentTrialCount, 500);
+            testCase.verifyEqual(summary.periodsPerTrial, 500);
+            testCase.verifyEqual(summary.ci95Linear, [1, 2; 1, 2], 'AbsTol', 0);
         end
 
         function sixMethodRunnerUsesOneSnapshotAndFixedCalibration(testCase)
@@ -126,6 +144,23 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 repmat(record.snapshotSignatures(1, :), 6, 1), 'AbsTol', 0);
             testCase.verifyEqual(record.epsilonS, 0.1, 'AbsTol', 0);
             testCase.verifyTrue(all(isfinite(record.sinrLinear)));
+
+            base = record.effectiveIncmConfigs{1};
+            expected = base; expected.lambdaT = 0;
+            testCase.verifyEqual(record.effectiveIncmConfigs{2}, expected);
+            expected = base; expected.ablation.alignment = false;
+            testCase.verifyEqual(record.effectiveIncmConfigs{3}, expected);
+            expected = base; expected.ablation.adaptiveQuadrature = false;
+            testCase.verifyEqual(record.effectiveIncmConfigs{4}, expected);
+            expected = base; expected.ablation.structureEnhancement = false;
+            testCase.verifyEqual(record.effectiveIncmConfigs{5}, expected);
+            expected = base; expected.ablation.pilotProjection = true;
+            testCase.verifyEqual(record.effectiveIncmConfigs{6}, expected);
+
+            invalidCfg = cfg;
+            invalidCfg.incm.lambdaT = 0;
+            testCase.verifyError(@() uav.experiment.runVariants(obs, [], invalidCfg), ...
+                'uav:experiment:InvalidFullAblationBaseline');
         end
 
         function metadataAndArtifactWriterCreateCompleteRerunnableBundle(testCase)
@@ -159,11 +194,23 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 'profile', 'experimentName', 'baseSeed', 'generatedAt', ...
                 'codeVersion', 'actualCounts', 'seedScheme'};
             testCase.verifyTrue(all(isfield(loaded.result.metadata, requiredMetadata)));
+            testCase.verifyTrue(all(isfield(loaded.result.metadata.toolboxes, ...
+                {'Name', 'Version', 'Release', 'Date'})));
             testCase.verifyEqual(loaded.result.cfg, cfg);
+
+            existingFiles = sort(string({dir(fullfile(cfg.output.rootDir, '**', '*')).name}));
+            noOverwriteCfg = cfg;
+            noOverwriteCfg.output.overwrite = false;
+            testCase.verifyError(@() uav.experiment.writeArtifacts( ...
+                result, summary, fig, noOverwriteCfg), ...
+                'uav:experiment:ArtifactExists');
+            testCase.verifyEqual(sort(string({dir(fullfile( ...
+                cfg.output.rootDir, '**', '*')).name})), existingFiles);
         end
 
         function fiveSmokeEntrypointsProduceEveryArtifactType(testCase)
             cfg = compactConfig(testCase);
+            configuredRoot = string(cfg.output.rootDir);
             entryPoints = uav.experiment.entryPoints();
             expected = ["exp01_model_validation", "exp02_jitter_sweep", ...
                 "exp03_snapshot_sweep", "exp04_dynamic_stability", "exp05_ablation"];
@@ -175,12 +222,31 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 testCase.verifyGreaterThan(result.cfg.beamforming.epsilonS, 0);
                 artifactPaths = string(struct2cell(rmfield(result.artifacts, 'status')));
                 testCase.verifyTrue(all(isfile(artifactPaths)));
+                testCase.verifyTrue(all(startsWith(artifactPaths, configuredRoot)));
                 testCase.verifyEqual(result.artifacts.status, "complete");
                 loaded = load(result.artifacts.mat, 'result');
                 testCase.verifyTrue(isfield(loaded.result, 'raw'));
                 testCase.verifyTrue(isfield(loaded.result, 'summary'));
                 if isfield(loaded.result.raw, 'sinrLinear')
                     testCase.verifyTrue(all(isfinite(loaded.result.raw.sinrLinear), 'all'));
+                end
+                switch entryPoints(index)
+                    case "exp01_model_validation"
+                        testCase.verifyTrue(isfield(loaded.result.summary, ...
+                            'zeroJitterMaximumSteeringDifference'));
+                    case "exp02_jitter_sweep"
+                        testCase.verifyTrue(all(isfield(loaded.result.summary, ...
+                            {'sinr', 'desiredGain', 'interferenceLeakage'})));
+                    case "exp03_snapshot_sweep"
+                        testCase.verifyTrue(all(isfield(loaded.result.summary, ...
+                            {'incmNmse', 'incmMinimumEigenvalue', ...
+                            'incmConditionNumber', 'runtime'})));
+                    case "exp04_dynamic_stability"
+                        testCase.verifyTrue(all(isfield(loaded.result.summary, ...
+                            {'outageProbability', 'periodMedianDesiredGain', ...
+                            'periodMedianInterferenceLeakage', 'runtime'})));
+                    case "exp05_ablation"
+                        testCase.verifyTrue(isfield(loaded.result, 'switchDiagnostics'));
                 end
             end
         end

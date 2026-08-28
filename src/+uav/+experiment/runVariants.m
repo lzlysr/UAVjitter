@@ -8,6 +8,7 @@ if ~isequal(variantNames, expected)
     error('uav:experiment:InvalidAblationContract', ...
         'The ablation runner requires the fixed configured variant order.');
 end
+validateFullBaseline(cfg);
 if isempty(priorState)
     priorState = cell(1, numel(variantNames));
 elseif ~iscell(priorState) || numel(priorState) ~= numel(variantNames)
@@ -28,12 +29,19 @@ incmNmse = zeros(1, variantCount);
 diagnostics = cell(1, variantCount);
 effectiveConfigs = cell(1, variantCount);
 aRef = cfg.derived.nominalSteeringReference;
+if ~isstruct(obs) || ~isfield(obs, 'truth')
+    error('uav:experiment:InvalidObservation', ...
+        'The ablation runner requires isolated truth for metrics only.');
+end
+algorithmObservation = rmfield(obs, 'truth');
 for variantIndex = 1:variantCount
     variantCfg = applyVariant(cfg, variantNames(variantIndex));
+    validateVariantDelta(cfg, variantCfg, variantNames(variantIndex));
     effectiveConfigs{variantIndex} = variantCfg.incm;
     variantTimer = tic;
     [estimatedIncm, priorState{variantIndex}, reconstructionDiagnostics] = ...
-        uav.incm.reconstruct("temporal", obs, priorState{variantIndex}, variantCfg);
+        uav.incm.reconstruct("temporal", algorithmObservation, ...
+        priorState{variantIndex}, variantCfg);
     [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
         "robust", estimatedIncm, aRef, variantCfg);
     runtimeSec(variantIndex) = toc(variantTimer);
@@ -48,6 +56,59 @@ for variantIndex = 1:variantCount
         'reconstruction', reconstructionDiagnostics, ...
         'beamforming', beamformingDiagnostics, ...
         'changedField', switchDeltaFields(variantIndex));
+end
+
+function validateFullBaseline(cfg)
+ablation = cfg.incm.ablation;
+isFull = cfg.incm.lambdaT > 0 && ablation.temporalContinuity && ...
+    ablation.alignment && ablation.adaptiveQuadrature && ...
+    ablation.structureEnhancement && ~ablation.pilotProjection;
+if ~isFull
+    error('uav:experiment:InvalidFullAblationBaseline', ...
+        'Exp5 requires the configured full temporal method as its baseline.');
+end
+end
+
+function validateVariantDelta(base, variant, name)
+restored = variant;
+switch name
+    case "full"
+    case "lambda_t_zero"
+        if variant.incm.lambdaT ~= 0
+            variantError(name);
+        end
+        restored.incm.lambdaT = base.incm.lambdaT;
+    case "identity_alignment"
+        if variant.incm.ablation.alignment
+            variantError(name);
+        end
+        restored.incm.ablation.alignment = base.incm.ablation.alignment;
+    case "uniform_quadrature"
+        if variant.incm.ablation.adaptiveQuadrature
+            variantError(name);
+        end
+        restored.incm.ablation.adaptiveQuadrature = ...
+            base.incm.ablation.adaptiveQuadrature;
+    case "no_structure"
+        if variant.incm.ablation.structureEnhancement
+            variantError(name);
+        end
+        restored.incm.ablation.structureEnhancement = ...
+            base.incm.ablation.structureEnhancement;
+    case "pilot_projection"
+        if ~variant.incm.ablation.pilotProjection
+            variantError(name);
+        end
+        restored.incm.ablation.pilotProjection = base.incm.ablation.pilotProjection;
+end
+if ~isequaln(restored, base)
+    variantError(name);
+end
+end
+
+function variantError(name)
+error('uav:experiment:InvalidAblationDelta', ...
+    'Variant %s must change exactly its declared field.', name);
 end
 signature = uav.util.snapshotSignature(obs.X);
 record = struct( ...

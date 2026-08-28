@@ -17,6 +17,18 @@ meanLinear = nan(1, groupCount);
 ci95Linear = nan(2, groupCount);
 validCounts = zeros(1, groupCount);
 stream = uav.util.makeStream(cfg.random.baseSeed, bootstrapSubstream);
+rowCount = size(values, 1);
+bootstrapMedians = nan(cfg.experiments.bootstrapReplicates, groupCount);
+for replicate = 1:cfg.experiments.bootstrapReplicates
+    sharedIndices = randi(stream, rowCount, rowCount, 1);
+    for group = 1:groupCount
+        selectedValues = values(sharedIndices, group);
+        selectedValues = selectedValues(isfinite(selectedValues));
+        if ~isempty(selectedValues)
+            bootstrapMedians(replicate, group) = median(selectedValues);
+        end
+    end
+end
 for group = 1:groupCount
     finiteValues = values(isfinite(values(:, group)), group);
     validCounts(group) = numel(finiteValues);
@@ -28,10 +40,8 @@ for group = 1:groupCount
     lowLinear(group) = quantile(finiteValues, ...
         cfg.experiments.aggregation.lowQuantile);
     meanLinear(group) = sum(finiteValues) / numel(finiteValues);
-    indices = randi(stream, numel(finiteValues), numel(finiteValues), ...
-        cfg.experiments.bootstrapReplicates);
-    bootstrapMedians = median(finiteValues(indices), 1);
-    ci95Linear(:, group) = quantile(bootstrapMedians, ...
+    finiteBootstrap = bootstrapMedians(isfinite(bootstrapMedians(:, group)), group);
+    ci95Linear(:, group) = quantile(finiteBootstrap, ...
         cfg.experiments.aggregation.confidenceQuantiles).';
 end
 summary = struct( ...
@@ -46,6 +56,7 @@ summary = struct( ...
     'validCounts', validCounts, ...
     'bootstrapSubstream', bootstrapSubstream, ...
     'bootstrapReplicates', cfg.experiments.bootstrapReplicates, ...
+    'bootstrapUnit', "row", ...
     'aggregationDomain', "linear");
 end
 
