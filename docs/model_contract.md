@@ -66,4 +66,5 @@ desired exclusion.
 The common robust weight minimizes `w^H RinHat w+gamma||w||^2` subject to
 `real(w^H aRef)-epsilonS||w||>=1`, as a `2M`-real-variable Optimization Toolbox
 problem. Epsilon is calibrated once from a fixed design-jitter distribution,
-not from current trial truth. With `epsilonS=0,gamma=0`, it uses standard MVDR.
+not from current trial truth. With `epsilonS=0`, it uses standard MVDR exactly,
+independent of the configured positive `gamma` value.

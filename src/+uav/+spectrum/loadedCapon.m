@@ -6,44 +6,34 @@ M = cfg.derived.M;
 Rx = (Rx + Rx') / 2;
 loading = cfg.spectrum.diagonalLoading * covarianceScale(Rx);
 loadedCovariance = Rx + loading * eye(M);
-gridAxis = linspace(-1, 1, cfg.spectrum.gridSize);
-[xiX, xiY] = meshgrid(gridAxis, gridAxis);
-visibleMask = xiX.^2 + xiY.^2 <= 1;
-powerMap = nan(size(xiX));
-
-for linearIndex = find(visibleMask).'
-    a = uav.array.steeringUPA([xiX(linearIndex); xiY(linearIndex)], ...
-        cfg.array.Nx, cfg.array.Ny, cfg.array.spacingOverLambda);
-    response = loadedCovariance \ a;
-    if any(~isfinite(response))
-        response = pinv(loadedCovariance) * a;
-    end
-    denominator = real(a' * response);
-    if denominator <= eps(max(1, norm(a) * norm(response)))
-        error('uav:spectrum:DegenerateCovariance', ...
-            'Loaded covariance has a nonpositive Capon denominator.');
-    end
-    powerMap(linearIndex) = 1 / denominator;
+grid = cfg.derived.spectrumGrid;
+manifold = grid.manifold;
+response = loadedCovariance \ manifold;
+if any(~isfinite(response), 'all')
+    response = pinv(loadedCovariance) * manifold;
 end
-
-if cfg.spectrum.gridSize == 1
-    cellArea = 4;
-else
-    gridStep = gridAxis(2) - gridAxis(1);
-    cellArea = gridStep^2;
+denominator = real(sum(conj(manifold) .* response, 1));
+tolerance = eps(max(1, sqrt(M) * vecnorm(response, 2, 1)));
+if any(denominator <= tolerance)
+    error('uav:spectrum:DegenerateCovariance', ...
+        'Loaded covariance has a nonpositive Capon denominator.');
 end
+powerMap = nan(size(grid.xiX));
+powerMap(grid.visibleLinearIndices) = 1 ./ denominator;
 diagnostics = struct( ...
-    'xiX', xiX, ...
-    'xiY', xiY, ...
-    'visibleMask', visibleMask, ...
-    'cellArea', cellArea, ...
+    'xiX', grid.xiX, ...
+    'xiY', grid.xiY, ...
+    'visibleMask', grid.visibleMask, ...
+    'visibleLinearIndices', grid.visibleLinearIndices, ...
+    'cellArea', grid.cellArea, ...
+    'usedCachedManifold', true, ...
     'loading', loading, ...
     'loadedCovariance', loadedCovariance);
 end
 
 function validateInputs(Rx, cfg)
-if ~isstruct(cfg) || ~isfield(cfg, 'derived') || ~isfield(cfg, 'array') || ...
-        ~isfield(cfg, 'spectrum')
+if ~isstruct(cfg) || ~isfield(cfg, 'derived') || ~isfield(cfg.derived, 'spectrumGrid') || ...
+        ~isfield(cfg, 'array') || ~isfield(cfg, 'spectrum')
     error('uav:spectrum:InvalidConfiguration', 'cfg is missing spectrum fields.');
 end
 M = cfg.derived.M;

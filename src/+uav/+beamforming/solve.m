@@ -50,7 +50,7 @@ if epsilonS >= referenceNorm
     error('uav:beamforming:InfeasibleUncertainty', ...
         'Robust feasibility requires epsilonS < ||aRef||.');
 end
-if epsilonS == 0 && gamma == 0
+if epsilonS == 0
     [w, diagnostics] = solveClosedForm(R, aRef, cfg, "mvdr");
     diagnostics.method = "robust";
     diagnostics.gamma = gamma;

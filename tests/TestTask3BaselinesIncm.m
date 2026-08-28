@@ -189,6 +189,41 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(powerMap(diagnostics.visibleMask))));
         end
 
+        function cachedGridManifoldAndBatchCaponMatchPointwiseReference(testCase)
+            cfg = config('smoke');
+            cfg.array.Nx = 2;
+            cfg.array.Ny = 3;
+            cfg.spectrum.gridSize = 11;
+            cfg = uav.config.validate(cfg);
+            grid = cfg.derived.spectrumGrid;
+
+            testCase.verifySize(grid.manifold, ...
+                [cfg.derived.M, nnz(grid.visibleMask)]);
+            testCase.verifyEqual(grid.directionCosines, ...
+                [grid.xiX(grid.visibleMask).'; grid.xiY(grid.visibleMask).'], ...
+                'AbsTol', 0);
+            pointwiseManifold = zeros(size(grid.manifold));
+            for index = 1:size(grid.directionCosines, 2)
+                pointwiseManifold(:, index) = uav.array.steeringUPA( ...
+                    grid.directionCosines(:, index), cfg.array.Nx, ...
+                    cfg.array.Ny, cfg.array.spacingOverLambda);
+            end
+            testCase.verifyEqual(grid.manifold, pointwiseManifold, 'AbsTol', 0);
+
+            seedMatrix = reshape(1:cfg.derived.M^2, cfg.derived.M, []);
+            Rx = seedMatrix * seedMatrix' + eye(cfg.derived.M);
+            [powerMap, diagnostics] = uav.spectrum.loadedCapon(Rx, cfg);
+            reference = nan(size(powerMap));
+            for index = 1:numel(grid.visibleLinearIndices)
+                a = pointwiseManifold(:, index);
+                reference(grid.visibleLinearIndices(index)) = ...
+                    1 / real(a' * (diagnostics.loadedCovariance \ a));
+            end
+            testCase.verifyEqual(powerMap, reference, 'RelTol', 1e-12, ...
+                'AbsTol', 1e-12);
+            testCase.verifyTrue(diagnostics.usedCachedManifold);
+        end
+
         function staticIncmIsHermitianPsdAndFiniteForBoundaryCases(testCase)
             cases = { ...
                 struct('Nx', 3, 'Ny', 3, 'L', 3, 'directions', [40, -25], 'inr', 20); ...

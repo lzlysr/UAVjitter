@@ -1,9 +1,9 @@
 # UAV attitude-jitter robust-INCM simulator
 
 MATLAB R2024a simulation system for a UAV-mounted rectangular UPA receiving a
-desired mmWave communication signal and fixed-world neighbouring-cell cochannel
-interference. UAV attitude jitter changes the apparent array-frame directions;
-output SINR is the primary metric.
+5G NR FR1 cellular-downlink desired signal from a serving ground base station
+and fixed-world neighbouring-cell cochannel interference. UAV attitude jitter
+changes the apparent array-frame directions; output SINR is the primary metric.
 
 The first version is narrowband, far-field and single-path. It deliberately
 excludes 5G NR link waveforms, multipath, source motion, attitude-sensor input,

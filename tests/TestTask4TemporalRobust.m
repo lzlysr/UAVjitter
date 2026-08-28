@@ -524,7 +524,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
         function robustEpsilonZeroRegressesExactlyToMvdr(testCase)
             cfg = config('smoke');
             cfg.beamforming.epsilonS = 0;
-            cfg.beamforming.gamma = 0;
+            cfg.beamforming.gamma = 0.7;
             R = [3, 0.2 + 0.1i; 0.2 - 0.1i, 1.5];
             aRef = [1; 0.5 + 0.2i];
 
@@ -533,6 +533,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
 
             testCase.verifyEqual(robust, mvdr, 'AbsTol', 1e-13);
             testCase.verifyEqual(diagnostics.responseMargin, 1, 'AbsTol', 1e-12);
+            testCase.verifyEqual(diagnostics.gamma, 0.7, 'AbsTol', 0);
             testCase.verifyTrue(diagnostics.usedMvdrRegressionPath);
         end
 
