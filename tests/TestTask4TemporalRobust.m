@@ -28,6 +28,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(cfg.incm.ablation.structureEnhancement);
             testCase.verifyFalse(cfg.incm.ablation.pilotProjection);
             testCase.verifyGreaterThanOrEqual(cfg.beamforming.gamma, 0);
+            testCase.verifyGreaterThan(cfg.beamforming.covariancePsdTolerance, 0);
             testCase.verifyGreaterThan(cfg.beamforming.solver.initialInteriorMargin, 0);
             testCase.verifyGreaterThan(cfg.beamforming.solver.feasibilityTolerance, 0);
             testCase.verifyEqual(cfg.beamforming.calibration.quantile, 0.95);
@@ -46,7 +47,8 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
                 'spectrum', 'quadratureFineRadiusBins', -1; ...
                 'spectrum', 'quadratureRefinement', 1; ...
                 'spectrum', 'quadratureDedupTolerance', 0; ...
-                'beamforming', 'gamma', -1};
+                'beamforming', 'gamma', -1; ...
+                'beamforming', 'covariancePsdTolerance', -1};
             for index = 1:size(invalidCases, 1)
                 cfg = config('smoke');
                 cfg.(invalidCases{index, 1}).(invalidCases{index, 2}) = ...
@@ -117,6 +119,52 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(contains(diagnostics.fallbackReason, "weak"));
         end
 
+        function alignmentMasksNonfiniteValuesOutsideIrregularSupport(testCase)
+            cfg = config('smoke');
+            [columns, rows] = meshgrid(1:11, 1:11);
+            mask = (rows - 6).^2 + (columns - 6).^2 <= 16;
+            mask(6, 6) = false;
+            previous = nan(11);
+            previous(mask) = 0;
+            previous(4, 5) = 1;
+            previous(7, 4) = 0.6;
+            previous(8, 7) = 0.3;
+            current = nan(11);
+            current(mask) = 0;
+            current(5, 6) = 1;
+            current(8, 5) = 0.6;
+            current(9, 8) = 0.3;
+
+            [aligned, diagnostics] = uav.spectrum.align2D( ...
+                current, previous, mask, cfg);
+
+            testCase.verifyEqual(diagnostics.shiftBins, [1, 1]);
+            testCase.verifyEqual(aligned(mask), current(mask), 'AbsTol', 0);
+            testCase.verifyEqual(aligned(~mask), zeros(nnz(~mask), 1), 'AbsTol', 0);
+            testCase.verifyTrue(all(isfinite(aligned), 'all'));
+        end
+
+        function alignmentUsesIdentityForGenuinelyAmbiguousTopScores(testCase)
+            cfg = config('smoke');
+            cfg.spectrum.alignmentMinCorrelation = 0.1;
+            cfg.spectrum.alignmentAmbiguityMargin = 0.05;
+            previous = zeros(9);
+            previous(5, 5) = 1;
+            current = zeros(9);
+            current(5, 4) = 1;
+            current(5, 6) = 1;
+
+            [aligned, diagnostics] = uav.spectrum.align2D( ...
+                current, previous, true(9), cfg);
+
+            testCase.verifyGreaterThanOrEqual(diagnostics.bestCorrelation, ...
+                cfg.spectrum.alignmentMinCorrelation);
+            testCase.verifyLessThan(diagnostics.ambiguityGap, ...
+                cfg.spectrum.alignmentAmbiguityMargin);
+            testCase.verifyEqual(diagnostics.fallbackReason, "ambiguous-evidence");
+            testCase.verifyEqual(aligned, previous, 'AbsTol', 0);
+        end
+
         function temporalProxMatchesHandDerivedBreakpointRegions(testCase)
             p = [0.1; 1; 2.1; 4];
             g = [2; 2; 2; 2];
@@ -178,7 +226,9 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             cfg.spectrum.gridSize = 11;
             cfg = uav.config.validate(cfg);
             [~, spectrumDiagnostics] = uav.spectrum.loadedCapon(eye(cfg.derived.M), cfg);
-            includedMask = spectrumDiagnostics.visibleMask;
+            gridNodes = [spectrumDiagnostics.xiX(:), spectrumDiagnostics.xiY(:)];
+            includedMask = reshape(independentAdmissibility(gridNodes, cfg), ...
+                size(spectrumDiagnostics.visibleMask));
             powerMap = ones(size(includedMask));
             peakIndex = sub2ind(size(powerMap), 6, 7);
 
@@ -194,7 +244,88 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyGreaterThan(quadrature.diagnostics.fineNodeCount, 0);
             testCase.verifyGreaterThan(quadrature.diagnostics.coarseNodeCount, 0);
             testCase.verifyTrue(all(quadrature.weights > 0));
-            testCase.verifyTrue(all(sum(quadrature.nodes.^2, 2) <= 1.25));
+            testCase.verifyTrue(all(independentAdmissibility(quadrature.nodes, cfg)));
+        end
+
+        function continuousAdmissibilityAndAdaptiveNodesRespectSoiBoundary(testCase)
+            cfg = config('smoke');
+            cfg.spectrum.gridSize = 21;
+            cfg = uav.config.validate(cfg);
+            [~, spectrumDiagnostics] = uav.spectrum.loadedCapon( ...
+                eye(cfg.derived.M), cfg);
+            gridNodes = [spectrumDiagnostics.xiX(:), spectrumDiagnostics.xiY(:)];
+            expectedMask = independentAdmissibility(gridNodes, cfg);
+
+            actualMask = uav.spectrum.admissibleDirections(gridNodes, cfg);
+
+            testCase.verifyEqual(actualMask, expectedMask);
+            angularDistance = lowerHemisphereAngularDistance(gridNodes, cfg);
+            nearBoundary = expectedMask & angularDistance < ...
+                deg2rad(cfg.spectrum.desiredExclusionHalfWidthDeg + 5) & ...
+                sum(gridNodes.^2, 2) < 0.9^2;
+            candidates = find(nearBoundary);
+            testCase.assertNotEmpty(candidates);
+            [~, nearest] = min(angularDistance(candidates));
+            peakIndex = candidates(nearest);
+            includedMask = reshape(expectedMask, size(spectrumDiagnostics.visibleMask));
+            powerMap = ones(size(includedMask));
+
+            quadrature = uav.spectrum.adaptiveQuadrature(powerMap, ...
+                spectrumDiagnostics, includedMask, peakIndex, cfg);
+
+            nodeDistance = lowerHemisphereAngularDistance(quadrature.nodes, cfg);
+            testCase.verifyTrue(all(sum(quadrature.nodes.^2, 2) <= 1 + 1e-12));
+            testCase.verifyGreaterThan(min(nodeDistance), ...
+                deg2rad(cfg.spectrum.desiredExclusionHalfWidthDeg));
+            testCase.verifyEqual(sum(quadrature.weights), ...
+                nnz(includedMask) * spectrumDiagnostics.cellArea, 'AbsTol', 1e-12);
+        end
+
+        function dedupKeepsPhysicalNodesAndToleranceIsGridBounded(testCase)
+            cfg = config('smoke');
+            cfg.spectrum.gridSize = 11;
+            cfg.spectrum.quadratureCoarseStride = 3;
+            cfg.spectrum.quadratureFineRadiusBins = 0;
+            gridStep = 2 / (cfg.spectrum.gridSize - 1);
+            maximumTolerance = gridStep / (2 * cfg.spectrum.quadratureRefinement);
+            cfg.spectrum.quadratureDedupTolerance = maximumTolerance;
+            validated = uav.config.validate(cfg);
+            testCase.verifyEqual(validated.spectrum.quadratureDedupTolerance, ...
+                maximumTolerance, 'AbsTol', 0);
+            cfg.spectrum.quadratureDedupTolerance = maximumTolerance * (1 + 1e-6);
+            testCase.verifyError(@() uav.config.validate(cfg), ...
+                'uav:config:InvalidAlgorithmParameter');
+
+            cfg.spectrum.quadratureDedupTolerance = 0.9 * maximumTolerance;
+            cfg = uav.config.validate(cfg);
+            controlledNodes = [-0.2, -0.2; -0.201, -0.201];
+            [mergedNodes, mergedWeights, mergedValues, mergedDiagnostics] = ...
+                uav.spectrum.mergeQuadratureNodes(controlledNodes, [1; 3], ...
+                [2; 4], cfg.spectrum.quadratureDedupTolerance);
+            testCase.verifyEqual(mergedNodes, controlledNodes(1, :), 'AbsTol', 0);
+            testCase.verifyEqual(mergedWeights, 4, 'AbsTol', 0);
+            testCase.verifyEqual(mergedValues, 3.5, 'AbsTol', 0);
+            testCase.verifyEqual(mergedDiagnostics.deduplicatedNodeCount, 1);
+
+            [~, spectrumDiagnostics] = uav.spectrum.loadedCapon( ...
+                eye(cfg.derived.M), cfg);
+            gridNodes = [spectrumDiagnostics.xiX(:), spectrumDiagnostics.xiY(:)];
+            includedMask = reshape(independentAdmissibility(gridNodes, cfg), ...
+                size(spectrumDiagnostics.visibleMask));
+            peakIndex = sub2ind(size(includedMask), 5, 5);
+            testCase.assertTrue(includedMask(peakIndex));
+            quadrature = uav.spectrum.adaptiveQuadrature(ones(size(includedMask)), ...
+                spectrumDiagnostics, includedMask, peakIndex, cfg);
+            axisValues = unique(spectrumDiagnostics.xiX(:));
+            offsets = (((1:cfg.spectrum.quadratureRefinement) - 0.5) / ...
+                cfg.spectrum.quadratureRefinement - 0.5) * gridStep;
+            refinedAxis = axisValues + offsets;
+            allowedCoordinates = unique([axisValues; refinedAxis(:)]);
+            xDistance = min(abs(quadrature.nodes(:, 1) - allowedCoordinates.'), [], 2);
+            yDistance = min(abs(quadrature.nodes(:, 2) - allowedCoordinates.'), [], 2);
+
+            testCase.verifyLessThanOrEqual(max([xDistance; yDistance]), 1e-12);
+            testCase.verifyTrue(all(independentAdmissibility(quadrature.nodes, cfg)));
         end
 
         function structureProjectionIsHermitianPsdFlooredAndShrinkable(testCase)
@@ -289,14 +420,21 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
 
         function temporalAblationsAreModuleLocalAndPilotDefaultsOff(testCase)
             cfg = compactConfig();
+            cfg.incm.lambdaS = 0.01;
+            cfg.incm.lambdaT = 0.2;
+            cfg.spectrum.alignmentMinCorrelation = 0.05;
+            cfg.spectrum.alignmentAmbiguityMargin = 1e-4;
+            cfg = uav.config.validate(cfg);
             testCase.verifyFalse(cfg.incm.ablation.pilotProjection);
             scenario = uav.scenario.generate(cfg, uav.util.makeStream(109, 1));
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(109, 2));
-            prior = struct('enhancedSpectrum', zeros(cfg.spectrum.gridSize), ...
+            [~, ~, seedDiagnostics] = uav.incm.reconstruct("temporal", obs, [], cfg);
+            prior = struct('enhancedSpectrum', shiftGridZero( ...
+                seedDiagnostics.residualPowerMap .* seedDiagnostics.includedMask, -1, 0), ...
                 'xiX', [], 'xiY', [], 'includedMask', []);
-            prior.enhancedSpectrum(4, 4) = 50;
 
-            [~, ~, base] = uav.incm.reconstruct("temporal", obs, prior, cfg);
+            [baseRin, ~, base] = uav.incm.reconstruct("temporal", obs, prior, cfg);
+            testCase.assertFalse(base.alignment.usedIdentity);
 
             continuityOff = cfg;
             continuityOff.incm.ablation.temporalContinuity = false;
@@ -309,12 +447,23 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
                 lambdaZero.enhancedSpectrum, 'AbsTol', 0);
             testCase.verifyEqual(noContinuity.residualPowerMap, ...
                 base.residualPowerMap, 'AbsTol', 0);
+            testCase.verifyEqual(noContinuity.rawPowerMap, base.rawPowerMap, 'AbsTol', 0);
+            testCase.verifyEqual(noContinuity.alignedPreviousSpectrum, ...
+                base.alignedPreviousSpectrum, 'AbsTol', 0);
+            testCase.verifyGreaterThan(norm(noContinuity.enhancedSpectrum - ...
+                base.enhancedSpectrum, 'fro'), 1e-12);
 
             alignmentOff = cfg;
             alignmentOff.incm.ablation.alignment = false;
             [~, ~, noAlignment] = uav.incm.reconstruct("temporal", obs, prior, alignmentOff);
             testCase.verifyEqual(noAlignment.alignment.shiftBins, [0, 0]);
             testCase.verifyEqual(noAlignment.residualPowerMap, base.residualPowerMap, 'AbsTol', 0);
+            testCase.verifyEqual(noAlignment.effectiveLambdaT, base.effectiveLambdaT, ...
+                'AbsTol', 0);
+            testCase.verifyGreaterThan(norm(noAlignment.alignedPreviousSpectrum - ...
+                base.alignedPreviousSpectrum, 'fro'), 1e-12);
+            testCase.verifyGreaterThan(norm(noAlignment.enhancedSpectrum - ...
+                base.enhancedSpectrum, 'fro'), 1e-12);
 
             uniform = cfg;
             uniform.incm.ablation.adaptiveQuadrature = false;
@@ -322,14 +471,24 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyEqual(uniformDiagnostics.enhancedSpectrum, ...
                 base.enhancedSpectrum, 'AbsTol', 0);
             testCase.verifyEqual(uniformDiagnostics.quadratureMode, "uniform");
+            testCase.verifyEqual(uniformDiagnostics.rawPowerMap, base.rawPowerMap, ...
+                'AbsTol', 0);
+            testCase.verifyGreaterThan(abs(size(uniformDiagnostics.nodes, 1) - ...
+                size(base.nodes, 1)), 0);
+            testCase.verifyGreaterThan(norm(uniformDiagnostics.rawIncm - ...
+                base.rawIncm, 'fro'), 1e-12);
 
             noStructure = cfg;
             noStructure.incm.ablation.structureEnhancement = false;
-            [~, ~, noStructureDiagnostics] = uav.incm.reconstruct( ...
+            [noStructureRin, ~, noStructureDiagnostics] = uav.incm.reconstruct( ...
                 "temporal", obs, prior, noStructure);
             testCase.verifyEqual(noStructureDiagnostics.enhancedSpectrum, ...
                 base.enhancedSpectrum, 'AbsTol', 0);
+            testCase.verifyEqual(noStructureDiagnostics.nodes, base.nodes, 'AbsTol', 0);
+            testCase.verifyEqual(noStructureDiagnostics.weights, base.weights, 'AbsTol', 0);
+            testCase.verifyEqual(noStructureDiagnostics.rawIncm, base.rawIncm, 'AbsTol', 0);
             testCase.verifyFalse(noStructureDiagnostics.structure.applied);
+            testCase.verifyGreaterThan(norm(noStructureRin - baseRin, 'fro'), 1e-12);
 
             projection = cfg;
             projection.incm.ablation.pilotProjection = true;
@@ -338,6 +497,10 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyTrue(projected.pilotProjectionApplied);
             testCase.verifyGreaterThan(norm(projected.spectrumInputCovariance - ...
                 base.spectrumInputCovariance, 'fro'), 1e-12);
+            testCase.verifyEqual(projected.effectiveLambdaT, base.effectiveLambdaT, ...
+                'AbsTol', 0);
+            testCase.verifyEqual(projected.quadratureMode, base.quadratureMode);
+            testCase.verifyEqual(projected.structure.applied, base.structure.applied);
         end
 
         function epsilonCalibrationIsDeterministicAndTrialIndependent(testCase)
@@ -393,6 +556,52 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             testCase.verifyError(@() uav.beamforming.solve("robust", R, aRef, cfg), ...
                 'uav:beamforming:InfeasibleUncertainty');
         end
+
+
+        function robustIsOptimalForIsotropicCovariance(testCase)
+            cfg = config('smoke');
+            cfg.beamforming.epsilonS = 0.3;
+            cfg.beamforming.gamma = 0.4;
+            covarianceScale = 2.5;
+            R = covarianceScale * eye(3);
+            aRef = [1; 1i; 0.5 - 0.2i];
+            referenceNorm = norm(aRef);
+            expected = aRef / (referenceNorm * ...
+                (referenceNorm - cfg.beamforming.epsilonS));
+            expectedObjective = (covarianceScale + cfg.beamforming.gamma) * ...
+                norm(expected)^2;
+
+            [w, diagnostics] = uav.beamforming.solve("robust", R, aRef, cfg);
+
+            testCase.verifyEqual(w, expected, 'AbsTol', 2e-6);
+            testCase.verifyEqual(diagnostics.objectiveValue, expectedObjective, ...
+                'AbsTol', 2e-7);
+            expectedQ = (covarianceScale + cfg.beamforming.gamma) * eye(6);
+            testCase.verifyEqual(diagnostics.realQuadraticMatrix, expectedQ, ...
+                'AbsTol', 0);
+        end
+
+        function robustUsesExactSingularPsdObjectiveAndRejectsIndefiniteInput(testCase)
+            cfg = config('smoke');
+            cfg.beamforming.epsilonS = 0.2;
+            cfg.beamforming.gamma = 0;
+            R = diag([0, 1]);
+            aRef = [1; 0];
+
+            [w, diagnostics] = uav.beamforming.solve("robust", R, aRef, cfg);
+
+            testCase.verifyEqual(w, [1 / (1 - cfg.beamforming.epsilonS); 0], ...
+                'AbsTol', 2e-6);
+            testCase.verifyEqual(diagnostics.objectiveValue, 0, 'AbsTol', 1e-10);
+            testCase.verifyEqual(diagnostics.objectiveCovariance, R, 'AbsTol', 0);
+            testCase.verifyEqual(diagnostics.realQuadraticMatrix, ...
+                diag([0, 1, 0, 1]), 'AbsTol', 0);
+
+            indefinite = diag([1, -0.1]);
+            testCase.verifyError(@() uav.beamforming.solve( ...
+                "robust", indefinite, [1; 1], cfg), ...
+                'uav:beamforming:IndefiniteCovariance');
+        end
     end
 end
 
@@ -405,4 +614,29 @@ cfg = config('smoke');
 cfg.spectrum.gridSize =  nine();
 cfg.beamforming.calibration.sampleCount = 64;
 cfg = uav.config.validate(cfg);
+end
+
+function mask = independentAdmissibility(nodes, cfg)
+mask = sum(nodes.^2, 2) <= 1;
+angularDistance = lowerHemisphereAngularDistance(nodes, cfg);
+mask = mask & angularDistance > ...
+    deg2rad(cfg.spectrum.desiredExclusionHalfWidthDeg);
+end
+
+function angularDistance = lowerHemisphereAngularDistance(nodes, cfg)
+radialSquared = sum(nodes.^2, 2);
+z = -sqrt(max(0, 1 - radialSquared));
+directions = [nodes, z];
+nominal = cfg.derived.nominalArrayUnitVectors(:, 1);
+cosine = directions * nominal;
+angularDistance = acos(max(-1, min(1, real(cosine))));
+end
+
+function shifted = shiftGridZero(values, rowShift, columnShift)
+shifted = zeros(size(values));
+[rowCount, columnCount] = size(values);
+sourceRows = max(1, 1 - rowShift):min(rowCount, rowCount - rowShift);
+sourceColumns = max(1, 1 - columnShift):min(columnCount, columnCount - columnShift);
+shifted(sourceRows + rowShift, sourceColumns + columnShift) = ...
+    values(sourceRows, sourceColumns);
 end

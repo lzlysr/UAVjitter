@@ -14,7 +14,8 @@ end
 fineMask = fineMask & includedMask;
 
 [fineNodes, fineWeights, fineValues] = refineCells(powerMap, ...
-    spectrumDiagnostics, fineMask, gridStep, cfg.spectrum.quadratureRefinement);
+    spectrumDiagnostics, fineMask, gridStep, ...
+    cfg.spectrum.quadratureRefinement, cfg);
 [coarseNodes, coarseWeights, coarseValues] = aggregateCoarseCells(powerMap, ...
     spectrumDiagnostics, includedMask & ~fineMask, spectrumDiagnostics.cellArea, ...
     cfg.spectrum.quadratureCoarseStride);
@@ -22,7 +23,9 @@ fineMask = fineMask & includedMask;
 nodes = [fineNodes; coarseNodes];
 weights = [fineWeights; coarseWeights];
 values = [fineValues; coarseValues];
-[nodes, weights, values] = mergeDuplicateNodes(nodes, weights, values, ...
+[nodes, weights, values, mergeDiagnostics] = ...
+    uav.spectrum.mergeQuadratureNodes( ...
+    nodes, weights, values, ...
     cfg.spectrum.quadratureDedupTolerance);
 quadrature = struct( ...
     'nodes', nodes, ...
@@ -34,11 +37,13 @@ quadrature = struct( ...
         'coarseCellCount', nnz(includedMask & ~fineMask), ...
         'fineNodeCount', size(fineNodes, 1), ...
         'coarseNodeCount', size(coarseNodes, 1), ...
+        'deduplicatedNodeCount', mergeDiagnostics.deduplicatedNodeCount, ...
         'representedArea', sum(weights), ...
         'fineMask', fineMask));
 end
 
-function [nodes, weights, values] = refineCells(powerMap, diagnostics, mask, gridStep, refinement)
+function [nodes, weights, values] = refineCells( ...
+        powerMap, diagnostics, mask, gridStep, refinement, cfg)
 linearIndices = find(mask);
 nodes = zeros(0, 2);
 weights = zeros(0, 1);
@@ -48,8 +53,8 @@ for linearIndex = reshape(linearIndices, 1, [])
     center = [diagnostics.xiX(linearIndex), diagnostics.xiY(linearIndex)];
     [offsetX, offsetY] = meshgrid(offsets, offsets);
     cellNodes = [center(1) + offsetX(:), center(2) + offsetY(:)];
-    inside = sum(cellNodes.^2, 2) <= 1 + 64 * eps;
-    cellNodes = cellNodes(inside, :);
+    admissible = uav.spectrum.admissibleDirections(cellNodes, cfg);
+    cellNodes = cellNodes(admissible, :);
     if isempty(cellNodes)
         cellNodes = center;
     end
@@ -83,27 +88,14 @@ linearIndices = sub2ind(size(mask), rows, columns);
 for group = 1:groupCount
     members = groups == group;
     count = nnz(members);
-    nodes(group, :) = [mean(diagnostics.xiX(linearIndices(members))), ...
-        mean(diagnostics.xiY(linearIndices(members)))];
+    memberIndices = linearIndices(members);
+    memberNodes = [diagnostics.xiX(memberIndices), diagnostics.xiY(memberIndices)];
+    centroid = mean(memberNodes, 1);
+    [~, representativeIndex] = min(sum((memberNodes - centroid).^2, 2));
+    nodes(group, :) = memberNodes(representativeIndex, :);
     weights(group) = count * cellArea;
     values(group) = mean(real(powerMap(linearIndices(members))));
 end
-end
-
-function [nodes, weights, values] = mergeDuplicateNodes(nodes, weights, values, tolerance)
-if isempty(nodes)
-    return;
-end
-keys = round(nodes / tolerance) * tolerance;
-[uniqueKeys, ~, groups] = unique(keys, 'rows', 'stable');
-if size(uniqueKeys, 1) == size(nodes, 1)
-    return;
-end
-mergedWeights = accumarray(groups, weights);
-mergedValues = accumarray(groups, weights .* values) ./ mergedWeights;
-nodes = uniqueKeys;
-weights = mergedWeights;
-values = mergedValues;
 end
 
 function validateInputs(powerMap, diagnostics, includedMask, peakIndices, cfg)
@@ -121,5 +113,10 @@ if ~ismatrix(powerMap) || ~isstruct(diagnostics) || ~all(isfield(diagnostics, re
 end
 if ~isstruct(cfg) || ~isfield(cfg, 'spectrum')
     error('uav:spectrum:InvalidConfiguration', 'cfg is missing quadrature fields.');
+end
+gridNodes = [diagnostics.xiX(includedMask), diagnostics.xiY(includedMask)];
+if ~all(uav.spectrum.admissibleDirections(gridNodes, cfg))
+    error('uav:spectrum:InvalidQuadratureInput', ...
+        'Every included cell center must satisfy continuous admissibility.');
 end
 end

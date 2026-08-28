@@ -39,6 +39,13 @@ function [w, diagnostics] = solveRobust(R, aRef, cfg)
 epsilonS = cfg.beamforming.epsilonS;
 gamma = cfg.beamforming.gamma;
 referenceNorm = norm(aRef);
+inputScale = max(norm(R, 2), 1);
+psdTolerance = cfg.beamforming.covariancePsdTolerance * inputScale;
+minimumInputEigenvalue = min(real(eig(R)));
+if minimumInputEigenvalue < -psdTolerance
+    error('uav:beamforming:IndefiniteCovariance', ...
+        'Robust R must be PSD within the configured relative tolerance.');
+end
 if epsilonS >= referenceNorm
     error('uav:beamforming:InfeasibleUncertainty', ...
         'Robust feasibility requires epsilonS < ||aRef||.');
@@ -56,11 +63,9 @@ if epsilonS == 0 && gamma == 0
 end
 
 M = size(R, 1);
-regularizedCovariance = R + gamma * eye(M);
-numericalLoading = minimumNumericalLoading(regularizedCovariance, cfg);
-regularizedCovariance = regularizedCovariance + numericalLoading * eye(M);
-Q = [real(regularizedCovariance), -imag(regularizedCovariance); ...
-    imag(regularizedCovariance), real(regularizedCovariance)];
+objectiveCovariance = R + gamma * eye(M);
+Q = [real(objectiveCovariance), -imag(objectiveCovariance); ...
+    imag(objectiveCovariance), real(objectiveCovariance)];
 Q = (Q + Q') / 2;
 realReference = [real(aRef); imag(aRef)];
 solver = cfg.beamforming.solver;
@@ -103,8 +108,10 @@ diagnostics = struct( ...
     'output', output, ...
     'objectiveValue', objectiveValue, ...
     'realSolution', realSolution, ...
-    'numericalLoading', numericalLoading, ...
-    'regularizedCovariance', regularizedCovariance);
+    'minimumInputEigenvalue', minimumInputEigenvalue, ...
+    'psdTolerance', psdTolerance, ...
+    'objectiveCovariance', objectiveCovariance, ...
+    'realQuadraticMatrix', Q);
 end
 
 function [objective, gradient] = realObjective(x, Q)

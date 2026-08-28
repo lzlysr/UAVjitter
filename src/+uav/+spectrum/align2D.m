@@ -2,6 +2,8 @@ function [alignedPrevious, diagnostics] = align2D(currentMap, previousMap, mask,
 %ALIGN2D Align a previous spectrum onto current grid coordinates.
 
 validateInputs(currentMap, previousMap, mask, cfg);
+sanitizedPrevious = previousMap;
+sanitizedPrevious(~mask) = 0;
 maxShift = reshape(cfg.spectrum.alignmentMaxShiftBins, 1, 2);
 shifts = zeros(prod(2 * maxShift + 1), 2);
 scores = -inf(size(shifts, 1), 1);
@@ -10,7 +12,7 @@ for rowShift = -maxShift(1):maxShift(1)
     for columnShift = -maxShift(2):maxShift(2)
         shiftIndex = shiftIndex + 1;
         shifts(shiftIndex, :) = [rowShift, columnShift];
-        [shifted, shiftedMask] = shiftWithoutWrap(previousMap, mask, ...
+        [shifted, shiftedMask] = shiftWithoutWrap(sanitizedPrevious, mask, ...
             rowShift, columnShift);
         overlap = mask & shiftedMask;
         scores(shiftIndex) = normalizedCorrelation(currentMap(overlap), ...
@@ -25,13 +27,14 @@ if numel(bestScore) > 1
 else
     secondScore = -inf;
 end
+ambiguityGap = bestScore(1) - secondScore;
 weakEvidence = ~isfinite(bestScore(1)) || ...
     bestScore(1) < cfg.spectrum.alignmentMinCorrelation;
 ambiguousEvidence = isfinite(secondScore) && ...
     bestScore(1) - secondScore < cfg.spectrum.alignmentAmbiguityMargin;
 if weakEvidence || ambiguousEvidence
     selectedShift = [0, 0];
-    alignedPrevious = previousMap;
+    alignedPrevious = sanitizedPrevious;
     if weakEvidence
         fallbackReason = "weak-evidence";
     else
@@ -40,8 +43,9 @@ if weakEvidence || ambiguousEvidence
     usedIdentity = true;
 else
     selectedShift = shifts(bestIndex, :);
-    alignedPrevious = shiftWithoutWrap(previousMap, true(size(mask)), ...
-        selectedShift(1), selectedShift(2));
+    [alignedPrevious, shiftedMask] = shiftWithoutWrap( ...
+        sanitizedPrevious, mask, selectedShift(1), selectedShift(2));
+    alignedPrevious(~(shiftedMask & mask)) = 0;
     fallbackReason = "none";
     usedIdentity = all(selectedShift == 0);
 end
@@ -50,6 +54,7 @@ diagnostics = struct( ...
     'shiftBins', selectedShift, ...
     'bestCorrelation', bestScore(1), ...
     'secondCorrelation', secondScore, ...
+    'ambiguityGap', ambiguityGap, ...
     'usedIdentity', usedIdentity, ...
     'fallbackReason', fallbackReason, ...
     'candidateShifts', shifts, ...
