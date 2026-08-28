@@ -33,50 +33,7 @@ manifest = struct( ...
     'generatedAt', result.metadata.generatedAt, ...
     'artifacts', artifacts);
 writeJson(staged.log, manifest);
-publishBundle(staged, artifacts, backups);
-end
-
-function publishBundle(staged, artifacts, backups)
-fields = fieldnames(artifacts);
-backedUp = false(size(fields));
-published = false(size(fields));
-try
-    for index = 1:numel(fields)
-        field = fields{index};
-        if isfile(artifacts.(field))
-            moveChecked(artifacts.(field), backups.(field));
-            backedUp(index) = true;
-        end
-    end
-    for index = 1:numel(fields)
-        field = fields{index};
-        moveChecked(staged.(field), artifacts.(field));
-        published(index) = true;
-    end
-    deleteExisting(string(struct2cell(backups)));
-catch exception
-    for index = 1:numel(fields)
-        field = fields{index};
-        if published(index) && isfile(artifacts.(field))
-            delete(artifacts.(field));
-        end
-    end
-    for index = 1:numel(fields)
-        field = fields{index};
-        if backedUp(index) && isfile(backups.(field))
-            movefile(backups.(field), artifacts.(field), 'f');
-        end
-    end
-    rethrow(exception);
-end
-end
-
-function moveChecked(source, destination)
-[moved, message] = movefile(source, destination, 'f');
-if ~moved
-    error('uav:experiment:ArtifactPublishFailure', ...
-        'Could not publish %s: %s', destination, message);
-end
+uav.experiment.publishStagedBundle(staged, artifacts, backups);
 end
 
 function artifacts = finalPaths(baseName, cfg)

@@ -30,7 +30,7 @@ incmConditionNumber = nan(1, methodCount);
 weights = complex(zeros(cfg.derived.M, methodCount));
 diagnostics = cell(1, methodCount);
 aRef = cfg.derived.nominalSteeringReference;
-algorithmObservation = rmfield(obs, 'truth');
+algorithmObservation = uav.experiment.algorithmObservation(obs);
 
 for methodIndex = 1:methodCount
     methodTimer = tic;

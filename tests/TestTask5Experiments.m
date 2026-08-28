@@ -124,6 +124,50 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(record1.interferenceLeakage)));
         end
 
+        function storedSubstreamsRegenerateEveryPairedSnapshot(testCase)
+            cfg = compactConfig(testCase);
+            cfg.monteCarlo.nTrials = 2;
+            cfg.beamforming.epsilonS = 0.1;
+            cfg = uav.config.validate(cfg);
+
+            [raw, seeds] = uav.experiment.collectMethods(cfg, 2, 1, 2);
+
+            for trialIndex = 1:cfg.monteCarlo.nTrials
+                scenario = uav.scenario.generate(cfg, uav.util.makeStream( ...
+                    cfg.random.baseSeed, seeds.scenarioSubstreams(trialIndex)));
+                for periodIndex = 1:2
+                    obs = uav.scenario.generatePeriod(cfg, scenario, periodIndex, ...
+                        uav.util.makeStream(cfg.random.baseSeed, ...
+                        seeds.snapshotSubstreams(trialIndex, periodIndex)));
+                    expected = uav.util.snapshotSignature(obs.X);
+                    stored = squeeze(raw.snapshotSignatures( ...
+                        trialIndex, periodIndex, :, :));
+                    testCase.verifyEqual(stored, repmat(expected, ...
+                        numel(cfg.experiments.methodNames), 1), 'AbsTol', 0);
+                end
+            end
+        end
+
+        function algorithmObservationWhitelistsNonOracleInputs(testCase)
+            cfg = compactConfig(testCase);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(719, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
+                uav.util.makeStream(719, 2));
+            obs.unapprovedDiagnostic = obs.truth.trueIncm;
+
+            safe = uav.experiment.algorithmObservation(obs);
+
+            testCase.verifyFalse(isfield(safe, 'truth'));
+            testCase.verifyFalse(isfield(safe, 'unapprovedDiagnostic'));
+            testCase.verifyEqual(sort(string(fieldnames(safe))), sort([ ...
+                "X"; "Rx"; "pilot"; "k"; "nominalSteeringReference"]));
+            testCase.verifyEqual(safe.X, obs.X, 'AbsTol', 0);
+            testCase.verifyEqual(safe.Rx, obs.Rx, 'AbsTol', 0);
+            testCase.verifyEqual(safe.pilot, obs.pilot, 'AbsTol', 0);
+            testCase.verifyEqual(safe.nominalSteeringReference, ...
+                obs.nominalSteeringReference, 'AbsTol', 0);
+        end
+
         function ablationRunnerChangesExactlyOneConfiguredSwitch(testCase)
             cfg = compactConfig(testCase);
             cfg.beamforming.epsilonS = 0.1;
@@ -171,6 +215,7 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             metadata = uav.experiment.metadata(cfg, "writer_contract", ...
                 struct('trials', 1, 'periods', 2), 0.25);
             result = struct('cfg', cfg, 'metadata', metadata, ...
+                'experimentName', "writer_contract", ...
                 'methodNames', cfg.experiments.methodNames, ...
                 'raw', struct('sinrLinear', ones(1, 2, 6)), ...
                 'summary', struct('medianLinear', ones(1, 6)), ...
@@ -206,6 +251,41 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 'uav:experiment:ArtifactExists');
             testCase.verifyEqual(sort(string({dir(fullfile( ...
                 cfg.output.rootDir, '**', '*')).name})), existingFiles);
+
+            failingFigure = figure('Visible', 'off');
+            failingAxes = axes('Parent', failingFigure);
+            plot(failingAxes, [0, 1], [2, 1]);
+            testCase.verifyError(@() uav.experiment.finalize(result, summary, ...
+                failingFigure, noOverwriteCfg, struct('trials', 1), tic), ...
+                'uav:experiment:ArtifactExists');
+            testCase.verifyFalse(isgraphics(failingFigure));
+        end
+
+        function failedBundlePublicationRestoresPreviousFiles(testCase)
+            root = tempname;
+            mkdir(root);
+            testCase.addTeardown(@() cleanupDir(root));
+            staged = struct( ...
+                'a', string(fullfile(root, 'stage-a.txt')), ...
+                'b', string(fullfile(root, 'stage-b.txt')));
+            artifacts = struct( ...
+                'a', string(fullfile(root, 'final-a.txt')), ...
+                'b', string(fullfile(root, 'missing', 'final-b.txt')));
+            backups = struct( ...
+                'a', string(fullfile(root, 'backup-a.txt')), ...
+                'b', string(fullfile(root, 'backup-b.txt')));
+            writeText(staged.a, 'new-a');
+            writeText(staged.b, 'new-b');
+            writeText(artifacts.a, 'old-a');
+
+            testCase.verifyError(@() uav.experiment.publishStagedBundle( ...
+                staged, artifacts, backups), ...
+                'uav:experiment:ArtifactPublishFailure');
+
+            testCase.verifyEqual(string(fileread(artifacts.a)), "old-a");
+            testCase.verifyFalse(isfile(artifacts.b));
+            testCase.verifyFalse(any(isfile(string(struct2cell(staged)))));
+            testCase.verifyFalse(any(isfile(string(struct2cell(backups)))));
         end
 
         function fiveSmokeEntrypointsProduceEveryArtifactType(testCase)
@@ -220,6 +300,10 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 result = feval(entryPoints(index), cfg);
                 testCase.verifyEqual(result.metadata.experimentName, entryPoints(index));
                 testCase.verifyGreaterThan(result.cfg.beamforming.epsilonS, 0);
+                testCase.verifyEqual(result.calibration.scope, ...
+                    "fixed-once-per-experiment-configuration");
+                testCase.verifyEqual(result.cfg.beamforming.epsilonS, ...
+                    result.calibration.epsilonS, 'AbsTol', 0);
                 artifactPaths = string(struct2cell(rmfield(result.artifacts, 'status')));
                 testCase.verifyTrue(all(isfile(artifactPaths)));
                 testCase.verifyTrue(all(startsWith(artifactPaths, configuredRoot)));
@@ -257,6 +341,32 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             for index = 1:numel(names)
                 source = fileread(fullfile(rootDir, 'experiments', names(index) + ".m"));
                 testCase.verifyEmpty(regexp(source, '=\s*[-+]?\d', 'once'));
+            end
+        end
+
+        function epsilonCalibrationOccursOnlyInExperimentPreparation(testCase)
+            rootDir = fileparts(fileparts(mfilename('fullpath')));
+            packageDir = fullfile(rootDir, 'src', '+uav', '+experiment');
+            sources = dir(fullfile(packageDir, '*.m'));
+            occurrenceCount = 0;
+            occurrenceFiles = strings(0, 1);
+            for index = 1:numel(sources)
+                source = string(fileread(fullfile(packageDir, sources(index).name)));
+                currentCount = count(source, "calibrateEpsilon(");
+                occurrenceCount = occurrenceCount + currentCount;
+                if currentCount > 0
+                    occurrenceFiles(end + 1, 1) = string(sources(index).name); %#ok<AGROW>
+                end
+            end
+            testCase.verifyEqual(occurrenceCount, 1);
+            testCase.verifyEqual(occurrenceFiles, "prepare.m");
+
+            runners = dir(fullfile(packageDir, 'runExp*.m'));
+            testCase.verifyEqual(numel(runners), 5);
+            for index = 1:numel(runners)
+                source = string(fileread(fullfile(packageDir, runners(index).name)));
+                testCase.verifyEqual(count(source, ...
+                    "uav.experiment.prepare("), 1);
             end
         end
 
@@ -314,4 +424,13 @@ function cleanupDir(pathValue)
 if isfolder(pathValue)
     rmdir(pathValue, 's');
 end
+end
+
+function writeText(pathValue, value)
+fileId = fopen(pathValue, 'w');
+if fileId < 0
+    error('uav:test:FixtureWriteFailure', 'Could not create test fixture.');
+end
+cleanup = onCleanup(@() fclose(fileId));
+fwrite(fileId, value, 'char');
 end

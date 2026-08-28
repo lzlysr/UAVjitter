@@ -29,11 +29,7 @@ incmNmse = zeros(1, variantCount);
 diagnostics = cell(1, variantCount);
 effectiveConfigs = cell(1, variantCount);
 aRef = cfg.derived.nominalSteeringReference;
-if ~isstruct(obs) || ~isfield(obs, 'truth')
-    error('uav:experiment:InvalidObservation', ...
-        'The ablation runner requires isolated truth for metrics only.');
-end
-algorithmObservation = rmfield(obs, 'truth');
+algorithmObservation = uav.experiment.algorithmObservation(obs);
 for variantIndex = 1:variantCount
     variantCfg = applyVariant(cfg, variantNames(variantIndex));
     validateVariantDelta(cfg, variantCfg, variantNames(variantIndex));
