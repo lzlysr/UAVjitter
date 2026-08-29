@@ -66,19 +66,22 @@ fig = uav.plot.newFigure(cfg);
 layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 plot(timeMs, attitudeDeg, 'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Attitude offset (deg)');
-legend({'roll', 'pitch', 'yaw'}, 'Location', 'best'); grid on;
-nexttile(layout);
-plot(timeMs, reshape(permute(scenario.directionCosines(:, :, 1:periodCount), ...
-    [3, 2, 1]), periodCount, []), 'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Direction cosine'); grid on;
-nexttile(layout);
-plot(timeMs, mismatch.', 'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Normalized steering mismatch'); grid on;
-nexttile(layout);
-plot(timeMs, arrayResponse.', 'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Normalized nominal array response'); grid on;
-title(layout, 'Model validation diagnostics');
+xlabel('时间 (ms)', 'FontSize', cfg.plot.fontSize);
+ylabel('姿态角偏差 (°)', 'FontSize', cfg.plot.fontSize);
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend({'横滚角', '俯仰角', '偏航角'}, 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize); grid on;
+% nexttile(layout);
+% plot(timeMs, reshape(permute(scenario.directionCosines(:, :, 1:periodCount), ...
+%     [3, 2, 1]), periodCount, []), 'LineWidth', cfg.plot.lineWidth);
+% xlabel('Time (ms)'); ylabel('Direction cosine'); grid on;
+% nexttile(layout);
+% plot(timeMs, mismatch.', 'LineWidth', cfg.plot.lineWidth);
+% xlabel('Time (ms)'); ylabel('Normalized steering mismatch'); grid on;
+% nexttile(layout);
+% plot(timeMs, arrayResponse.', 'LineWidth', cfg.plot.lineWidth);
+% xlabel('Time (ms)'); ylabel('Normalized nominal array response'); grid on;
+% title(layout, 'Model validation diagnostics');
 
 result = struct( ...
     'experimentName', "exp01_model_validation", ...

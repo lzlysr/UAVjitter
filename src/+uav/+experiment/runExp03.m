@@ -41,27 +41,41 @@ layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 semilogx(snapshotPoints, sinrSummary.medianDb, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('Snapshots per period'); ylabel('Median output SINR (dB)'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Snapshots per period', 'FontSize', cfg.plot.fontSize);
+ylabel('Median output SINR (dB)', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 semilogx(snapshotPoints, nmseSummary.median, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('Snapshots per period'); ylabel('Median INCM NMSE'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Snapshots per period', 'FontSize', cfg.plot.fontSize);
+ylabel('Median INCM NMSE', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 semilogx(snapshotPoints, runtimeSummary.median, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('Snapshots per period'); ylabel('Median runtime (s)'); grid on;
+xlabel('Snapshots per period', 'FontSize', cfg.plot.fontSize);
+ylabel('Median runtime (s)', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
 nexttile(layout);
 semilogx(snapshotPoints, minimumEigenvalueSummary.median, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('Snapshots per period'); ylabel('Median minimum eigenvalue'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Snapshots per period', 'FontSize', cfg.plot.fontSize);
+ylabel('Median minimum eigenvalue', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 semilogx(snapshotPoints, conditionNumberSummary.median, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('Snapshots per period'); ylabel('Median INCM condition number'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Snapshots per period', 'FontSize', cfg.plot.fontSize);
+ylabel('Median INCM condition number', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 title(layout, 'Snapshot-count sweep');
 
 result = struct('experimentName', "exp03_snapshot_sweep", ...

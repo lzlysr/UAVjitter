@@ -50,13 +50,19 @@ for methodIndex = 1:methodCount
     errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
         'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
 end
-xlabel('三轴姿态抖动RMS（度）'); ylabel('输出SINR中位数（dB）'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('三轴姿态抖动RMS（度）', 'FontSize', cfg.plot.fontSize);
+ylabel('输出SINR中位数（dB）', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 plot(jitterPoints, sinrSummary.lowDb, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('三轴姿态抖动RMS（度）'); ylabel('输出SINR第5百分位（dB）'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('三轴姿态抖动RMS（度）', 'FontSize', cfg.plot.fontSize);
+ylabel('输出SINR第5百分位（dB）', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 mismatchMedian = mismatchSummary.median(:, 1);
 mismatchLow = mismatchSummary.low(:, 1);
@@ -64,8 +70,10 @@ mismatchHigh = mismatchSummary.p95(:, 1);
 errorbar(jitterPoints, mismatchMedian, ...
     mismatchMedian - mismatchLow, mismatchHigh - mismatchMedian, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('三轴姿态抖动RMS（度）');
-ylabel('期望信号归一化导向矢量失配程度'); grid on;
+xlabel('三轴姿态抖动RMS（度）', 'FontSize', cfg.plot.fontSize);
+ylabel('期望信号归一化导向矢量失配程度', ...
+    'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
 title(layout, '姿态抖动RMS配对扫描');
 
 result = struct('experimentName', "exp02_jitter_sweep", ...

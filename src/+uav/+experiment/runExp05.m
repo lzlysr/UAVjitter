@@ -39,13 +39,14 @@ ablationPositions = 1:variantCount;
 ablationLabels = replace(cfg.experiments.ablationNames, "_", " ");
 bar(ablationPositions, sinrSummary.medianDb);
 xticks(ablationPositions); xticklabels(ablationLabels); xtickangle(15);
-ylabel('Median output SINR (dB)'); grid on;
-set(gca, 'TickLabelInterpreter', 'none');
+ylabel('Median output SINR (dB)', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'TickLabelInterpreter', 'none', 'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 bar(ablationPositions, sinrSummary.lowDb);
 xticks(ablationPositions); xticklabels(ablationLabels); xtickangle(15);
-ylabel('5th-percentile output SINR (dB)'); grid on;
-set(gca, 'TickLabelInterpreter', 'none');
+ylabel('5th-percentile output SINR (dB)', ...
+    'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'TickLabelInterpreter', 'none', 'FontSize', cfg.plot.fontSize);
 title(layout, 'Paired temporal-method ablations');
 
 result = struct('experimentName', "exp05_ablation", ...

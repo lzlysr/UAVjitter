@@ -43,8 +43,11 @@ layout = tiledlayout(fig, 'flow');
 nexttile(layout);
 timeMs = (0:periodCount - 1).' * cfg.timeline.dtSec * 1e3;
 plot(timeMs, periodMedianDb, 'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Across-trial median SINR (dB)'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Time (ms)', 'FontSize', cfg.plot.fontSize);
+ylabel('Across-trial median SINR (dB)', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout); hold on;
 for methodIndex = 1:methodCount
     % CDF仅在展示时将线性SINR转换为dB。
@@ -52,24 +55,34 @@ for methodIndex = 1:methodCount
         10 * log10(sinrValues(:, methodIndex)));
     plot(cdfX, cdfProbability, 'LineWidth', cfg.plot.lineWidth);
 end
-xlabel('Output SINR (dB)'); ylabel('Empirical CDF'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Output SINR (dB)', 'FontSize', cfg.plot.fontSize);
+ylabel('Empirical CDF', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 plot(timeMs, periodMedianGain, 'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Across-trial median desired gain'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Time (ms)', 'FontSize', cfg.plot.fontSize);
+ylabel('Across-trial median desired gain', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 plot(timeMs, 10 * log10(max(periodMedianLeakage, realmin)), ...
     'LineWidth', cfg.plot.lineWidth);
-xlabel('Time (ms)'); ylabel('Across-trial median leakage (dB)'); grid on;
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
+xlabel('Time (ms)', 'FontSize', cfg.plot.fontSize);
+ylabel('Across-trial median leakage (dB)', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 runtimeBars = [runtimeSummary.mean.', runtimeSummary.p95.'];
 bar(categorical(cfg.experiments.methodNames, cfg.experiments.methodNames, ...
     'Ordinal', true), runtimeBars);
-ylabel('Runtime per period (s)'); grid on;
-legend({'mean', '95th percentile'}, 'Location', 'best');
-set(gca, 'TickLabelInterpreter', 'none');
+ylabel('Runtime per period (s)', 'FontSize', cfg.plot.fontSize); grid on;
+legend({'mean', '95th percentile'}, 'Location', 'best', ...
+    'FontSize', cfg.plot.fontSize);
+set(gca, 'TickLabelInterpreter', 'none', 'FontSize', cfg.plot.fontSize);
 title(layout, 'Dynamic stability diagnostics');
 
 result = struct('experimentName', "exp04_dynamic_stability", ...

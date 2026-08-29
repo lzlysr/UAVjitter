@@ -398,7 +398,8 @@ if ~islogical(cfg.plot.visible) || ~isscalar(cfg.plot.visible) || ...
         ~isequal(reshape(cfg.plot.formats, 1, []), ["fig", "pdf", "png"])
     experimentError('Plot switches and formats are invalid.');
 end
-positivePlotFields = {'resolutionDpi', 'lineWidth', 'markerSize', 'maxTraceTrials'};
+positivePlotFields = {'resolutionDpi', 'lineWidth', 'markerSize', ...
+    'fontSize', 'maxTraceTrials'};
 for index = 1:numel(positivePlotFields)
     value = cfg.plot.(positivePlotFields{index});
     if ~isscalar(value) || ~isnumeric(value) || ~isfinite(value) || value <= 0
