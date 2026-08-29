@@ -29,11 +29,18 @@ sinrSummary = uav.experiment.summarizePoints( ...
 gainSummary = uav.experiment.summarizeFinitePoints(raw.desiredGain, cfg);
 leakageSummary = uav.experiment.summarizeFinitePoints( ...
     raw.interferenceLeakage, cfg);
+% 失配是场景指标而不是方法指标。先在每次试验内部跨周期取中位数，
+% 再统计不同独立试次的分布，避免把时间相关周期误当成独立样本。
+trialMedianMismatch = median( ...
+    raw.desiredSteeringMismatchNormalized, 2);
+mismatchSummary = uav.experiment.summarizeFinitePoints( ...
+    trialMedianMismatch, cfg);
+mismatchSummary.aggregationUnit = "trial-median-over-periods";
 summaryTable = sweepTable(jitterPoints, cfg.experiments.methodNames, ...
-    sinrSummary, gainSummary, leakageSummary);
+    sinrSummary, gainSummary, leakageSummary, mismatchSummary);
 
 fig = uav.plot.newFigure(cfg);
-% 上图：中位SINR及95%置信区间；下图：输出SINR第5百分位。
+% 三个面板依次展示中位SINR、SINR低分位和式（3-10）期望导向失配。
 layout = tiledlayout(fig, 'flow');
 nexttile(layout); hold on;
 for methodIndex = 1:methodCount
@@ -43,20 +50,30 @@ for methodIndex = 1:methodCount
     errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
         'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
 end
-xlabel('Attitude jitter RMS (deg)'); ylabel('Median output SINR (dB)'); grid on;
+xlabel('三轴姿态抖动RMS（度）'); ylabel('输出SINR中位数（dB）'); grid on;
 legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
 nexttile(layout);
 plot(jitterPoints, sinrSummary.lowDb, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('Attitude jitter RMS (deg)'); ylabel('5th-percentile output SINR (dB)'); grid on;
+xlabel('三轴姿态抖动RMS（度）'); ylabel('输出SINR第5百分位（dB）'); grid on;
 legend(cellstr(cfg.experiments.methodNames), 'Location', 'best');
-title(layout, 'Paired jitter sweep');
+nexttile(layout);
+mismatchMedian = mismatchSummary.median(:, 1);
+mismatchLow = mismatchSummary.low(:, 1);
+mismatchHigh = mismatchSummary.p95(:, 1);
+errorbar(jitterPoints, mismatchMedian, ...
+    mismatchMedian - mismatchLow, mismatchHigh - mismatchMedian, '-o', ...
+    'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
+xlabel('三轴姿态抖动RMS（度）');
+ylabel('期望信号归一化导向矢量失配程度'); grid on;
+title(layout, '姿态抖动RMS配对扫描');
 
 result = struct('experimentName', "exp02_jitter_sweep", ...
     'calibration', calibration, 'methodNames', cfg.experiments.methodNames, ...
     'seedScheme', {seeds}, 'raw', raw, ...
     'summary', struct('sinr', sinrSummary, 'desiredGain', gainSummary, ...
-        'interferenceLeakage', leakageSummary));
+        'interferenceLeakage', leakageSummary, ...
+        'desiredSteeringMismatch', mismatchSummary));
 actualCounts = struct('trials', trialCount, 'periodsPerPoint', periodCount, ...
     'points', pointCount, 'methods', methodCount);
 result = uav.experiment.finalize(result, summaryTable, fig, cfg, ...
@@ -74,6 +91,8 @@ for index = 1:numel(fields)
     raw.(fields{index}) = nan(trials, periods, points, methods);
 end
 raw.snapshotSignatures = zeros(trials, periods, points, methods, 4);
+% 期望导向失配只由姿态场景决定，不沿方法维重复存储。
+raw.desiredSteeringMismatchNormalized = zeros(trials, periods, points);
 end
 
 function raw = assignPoint(raw, pointRaw, pointIndex)
@@ -84,16 +103,25 @@ for index = 1:numel(fields)
     raw.(fields{index})(:, :, pointIndex, :) = pointRaw.(fields{index});
 end
 raw.snapshotSignatures(:, :, pointIndex, :, :) = pointRaw.snapshotSignatures;
+raw.desiredSteeringMismatchNormalized(:, :, pointIndex) = ...
+    pointRaw.desiredSteeringMismatchNormalized;
 end
 
-function output = sweepTable(points, names, sinr, gain, leakage)
+function output = sweepTable(points, names, sinr, gain, leakage, mismatch)
 %SWEEPTABLE 将“扫描点×方法”的矩阵统计展开为长表，便于CSV分析。
 [pointGrid, methodGrid] = ndgrid(points, 1:numel(names));
+mismatchMedian = repmat(mismatch.median(:, 1), 1, numel(names));
+mismatchLow = repmat(mismatch.low(:, 1), 1, numel(names));
+mismatchHigh = repmat(mismatch.p95(:, 1), 1, numel(names));
 output = table(pointGrid(:), reshape(names(methodGrid), [], 1), ...
     sinr.medianDb(:), reshape(sinr.ci95Db(1, :, :), [], 1), ...
     reshape(sinr.ci95Db(2, :, :), [], 1), sinr.lowDb(:), ...
-    gain.median(:), leakage.median(:), ...
+    gain.median(:), leakage.median(:), mismatchMedian(:), ...
+    mismatchLow(:), mismatchHigh(:), ...
     'VariableNames', {'jitterRmsDeg', 'method', 'medianSinrDb', ...
     'ci95LowDb', 'ci95HighDb', 'p05SinrDb', 'medianDesiredGain', ...
-    'medianInterferenceLeakage'});
+    'medianInterferenceLeakage', ...
+    'medianDesiredSteeringMismatchNormalized', ...
+    'p05DesiredSteeringMismatchNormalized', ...
+    'p95DesiredSteeringMismatchNormalized'});
 end

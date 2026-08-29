@@ -1,8 +1,9 @@
 function [raw, seeds] = collectMethods(cfg, experimentIndex, pointIndex, periodCount)
 %COLLECTMETHODS 生成配对观测并收集六种方法的原始指标。
-%   raw各字段尺寸为[试次×周期×方法]；snapshotSignatures额外有长度4的
-%   摘要维。seeds保存实际使用的场景和快拍子流，支持独立重建复核。
-%   “配对”表示同一试次、同一周期的六种方法只生成一次obs。
+%   方法性能字段尺寸为[试次×周期×方法]；与方法无关的期望导向失配
+%   尺寸为[试次×周期]；snapshotSignatures额外有长度4的摘要维。
+%   seeds保存实际使用的场景和快拍子流，支持独立重建复核。“配对”表示
+%   同一试次、同一周期的六种方法只生成一次obs。
 
 trialCount = cfg.monteCarlo.nTrials;
 methodCount = numel(cfg.experiments.methodNames);
@@ -15,6 +16,7 @@ raw = struct( ...
     'incmNmse', nan(trialCount, periodCount, methodCount), ...
     'incmMinimumEigenvalue', nan(trialCount, periodCount, methodCount), ...
     'incmConditionNumber', nan(trialCount, periodCount, methodCount), ...
+    'desiredSteeringMismatchNormalized', zeros(trialCount, periodCount), ...
     'snapshotSignatures', zeros(trialCount, periodCount, methodCount, 4));
 seeds = struct( ...
     'scenarioSubstreams', zeros(trialCount, 1), ...
@@ -34,6 +36,11 @@ for trialIndex = 1:trialCount
         seeds.snapshotSubstreams(trialIndex, periodIndex) = snapshotSubstream;
         obs = uav.scenario.generatePeriod(cfg, scenario, periodIndex, ...
             uav.util.makeStream(cfg.random.baseSeed, snapshotSubstream));
+        % 该真值仅用于实验评价，不进入任何非Oracle算法输入。
+        desiredActual = obs.truth.trueASVs(:, 1);
+        desiredNominal = cfg.derived.nominalSteeringReference;
+        raw.desiredSteeringMismatchNormalized(trialIndex, periodIndex) = ...
+            norm(desiredActual - desiredNominal, 2) / norm(desiredNominal, 2);
         [record, runnerState] = uav.experiment.runMethods(obs, runnerState, cfg);
         raw.sinrLinear(trialIndex, periodIndex, :) = record.sinrLinear;
         raw.desiredGain(trialIndex, periodIndex, :) = record.desiredGain;

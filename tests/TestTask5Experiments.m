@@ -158,6 +158,64 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             end
         end
 
+        % 实验采集层必须从同一姿态场景记录式（3-10）的期望导向失配，
+        % 且该指标与六种方法无关，不能沿方法维重复保存。
+        function collectMethodsRecordsDesiredSteeringMismatch(testCase)
+            cfg = compactConfig(testCase);
+            cfg.monteCarlo.nTrials = 2;
+            cfg.attitude.stdDeg = [2, 1, 3];
+            cfg = uav.config.validate(cfg);
+
+            [raw, seeds] = uav.experiment.collectMethods(cfg, 2, 1, 2);
+
+            testCase.verifySize(raw.desiredSteeringMismatchNormalized, [2, 2]);
+            nominal = cfg.derived.nominalSteeringReference;
+            for trialIndex = 1:cfg.monteCarlo.nTrials
+                scenario = uav.scenario.generate(cfg, uav.util.makeStream( ...
+                    cfg.random.baseSeed, seeds.scenarioSubstreams(trialIndex)));
+                for periodIndex = 1:2
+                    actual = scenario.steeringTruth(:, 1, periodIndex);
+                    expected = norm(actual - nominal, 2) / norm(nominal, 2);
+                    testCase.verifyEqual( ...
+                        raw.desiredSteeringMismatchNormalized( ...
+                        trialIndex, periodIndex), expected, 'AbsTol', 1e-14);
+                end
+            end
+        end
+
+        % 实验2必须把期望导向失配作为独立于方法的抖动RMS扫描指标，
+        % 同时保存逐周期原始值、统计汇总和CSV列。
+        function jitterSweepExportsDesiredSteeringMismatch(testCase)
+            cfg = compactConfig(testCase);
+
+            result = uav.experiment.runExp02(cfg);
+
+            testCase.verifySize( ...
+                result.raw.desiredSteeringMismatchNormalized, [1, 1, 2]);
+            testCase.verifyEqual( ...
+                result.raw.desiredSteeringMismatchNormalized(:, :, 1), ...
+                0, 'AbsTol', 1e-14);
+            testCase.verifyGreaterThan( ...
+                result.raw.desiredSteeringMismatchNormalized(:, :, 2), 0);
+            testCase.verifyTrue(isfield(result.summary, ...
+                'desiredSteeringMismatch'));
+            testCase.verifySize( ...
+                result.summary.desiredSteeringMismatch.median, [2, 1]);
+
+            exported = readtable(result.artifacts.csv);
+            testCase.verifyTrue(ismember( ...
+                'medianDesiredSteeringMismatchNormalized', ...
+                exported.Properties.VariableNames));
+            for pointIndex = 1:numel(cfg.experiments.jitterSweepDeg)
+                rows = exported.jitterRmsDeg == ...
+                    cfg.experiments.jitterSweepDeg(pointIndex);
+                testCase.verifyEqual(unique( ...
+                    exported.medianDesiredSteeringMismatchNormalized(rows)), ...
+                    result.summary.desiredSteeringMismatch.median(pointIndex), ...
+                    'AbsTol', 1e-14);
+            end
+        end
+
         % 非Oracle白名单应剥离truth以及未来可能增加的未批准诊断字段。
         function algorithmObservationWhitelistsNonOracleInputs(testCase)
             cfg = compactConfig(testCase);
