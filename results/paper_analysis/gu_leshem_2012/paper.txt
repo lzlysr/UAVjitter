@@ -1,0 +1,496 @@
+IEEE TRANSACTIONS ON SIGNAL PROCESSING, VOL. 60, NO. 7, JULY 2012                                                                                         3881
+
+
+
+  Robust Adaptive Beamforming Based on Interference                                 the theoretical received signal covariance matrix instead of the required
+  Covariance Matrix Reconstruction and Steering Vector                              interference-plus-noise covariance matrix. The second category of ap-
+                      Estimation                                                    proaches simply processes the presumed steering vector of the signal,
+                                                                                    since the exact knowledge of the steering vector is not easy to obtain.
+                       Yujie Gu and Amir Leshem                                     In this category, the worst-case performance optimization-based adap-
+                                                                                    tive beamforming technique [2], [6]–[8] makes explicit use of an uncer-
+                                                                                    tainty set of the signal steering vector. In practice, neither the mismatch
+   Abstract—Adaptive beamformers are sensitive to model mismatch, espe-             vector nor its norm bound is known. A more recent approach in this cat-
+cially when the desired signal is present in training snapshots or when the         egory is to estimate the actual steering vector in an iterative way [9].
+training is done using data samples. In contrast to previous works, this cor-          When the array manifold is fully known there is no difference
+respondence attempts to reconstruct the interference-plus-noise covariance
+matrix instead of searching for the optimal diagonal loading factor for the
+                                                                                    between using the received signal covariance matrix also known
+sample covariance matrix. The estimator is based on the Capon spectral              sample matrix inversion (SMI) or minimum power distortionless
+estimator integrated over a region separated from the desired signal di-            response (MPDR) and using the interference-plus-noise covariance
+rection. This is shown to be more robust than using the sample covariance           matrix known as minimum variance distortionless response (MVDR)
+matrix. Subsequently, the mismatch in the steering vector of the desired            [1]. However, when the array manifold is not completely known it is
+signal is estimated by maximizing the beamformer output power under a
+constraint that prevents the corrected steering vector from getting close to        better to use the MVDR technique [1], [10]. In contrast, most of the
+the interference steering vectors. The proposed adaptive beamforming al-            robust techniques developed in recent years use generalizations of the
+gorithm does not impose a norm constraint. Therefore, it can be used even           MPDR technique. Recently, efforts to separate the effect of the inter-
+in applications where gain perturbations affect the steering vector. Simu-          ferers has been done by Khabbazibasmenj et al. [19] and by Mallipeddi
+lation results demonstrate that the performance of the proposed adaptive
+                                                                                    et al. [20]. In both papers, the interference-plus-noise covariance ma-
+beamformer is almost always close to the optimal value across a wide range
+of signal to noise and signal to interference ratios.                                                                       C
+                                                                                    trix is replaced by a matrix of the form  = 2    d d          H
+                                                                                                                                       ( ) ( ) d . In [19],
+                                                                                    this is only used as part of a semidefinite optimization for correcting
+  Index Terms—Covariance matrix reconstruction, robust adaptive beam-
+forming, steering vector estimation.                                                the desired signal steering vector. This leads to degraded performance
+                                                                                    at high signal to noise ratio. In [20], the integral is replaced by a
+                                                                                    discrete sum over interferences DOAs determined by minimizing
+                             I. INTRODUCTION                                        the Capon spectral estimator. The fact that no power estimate of the
+                                                                                    interferes is included in the construction of the covariance matrix, will
+   Adaptive beamforming is a ubiquitous task in array signal processing
+                                                                                    harm the method in high dynamic range applications, such as radio
+and has been widely used in radar, sonar, radio astronomy, wire-
+                                                                                    astronomical imaging of diffuse sources.
+less communications, microphone array speech processing, medical
+                                                                                       In this correspondence, we develop a new robust adaptive beam-
+imaging, and other areas (see, for example, [1], [2], and the references
+                                                                                    forming algorithm based on interference-plus-noise covariance matrix
+therein). However, the adaptive beamformer is also well-known to
+                                                                                    reconstruction and steering vector estimation. As mentioned above the
+be sensitive to model mismatch, especially when the desired signal
+                                                                                    MVDR beamformers are much more robust to array manifold errors
+is present in the training data. Whenever a model mismatch exists,
+                                                                                    than the MPDR beamformers [1], [10]. For this reason, we propose
+the conventional adaptive beamformer will suffer severe performance
+                                                                                    to reconstruct the interference-plus-noise covariance matrix using the
+degradation. Therefore, robust adaptive beamforming has been an
+                                                                                    spatial spectrum distribution instead of searching for the optimal di-
+intensive research topic, and various robust adaptive beamforming
+                                                                                    agonal loading factor for the sample covariance matrix. In addition,
+techniques have been proposed in the past decades; see, e.g., [1] and [2].
+                                                                                    the presumed steering vector of the signal is subsequently corrected
+   In general, these robust techniques can be classified into two cate-
+                                                                                    to maximize the beamformer output power under the constraint that
+gories based on the fundamental Capon beamformer [3]. The first cat-
+                                                                                    the corrected steering vector does not converge to any interference.
+egory covers techniques used solely to process the sample covariance
+                                                                                    By combining them together, we obtain the interference-plus-noise co-
+matrix, because the exact interference-plus-noise covariance matrix is
+                                                                                    variance matrix reconstruction plus steering vector estimation-based
+usually unavailable in practical applications. The most popular one in
+                                                                                    adaptive beamformer. We also do not require a norm constraint on the
+this category is the so-called diagonal loading technique [4], where a
+                                                                                    steering vector. Hence, the proposed adaptive beamformer can be ap-
+scaled identity matrix is added to the sample covariance matrix. How-
+                                                                                    plied to many more scenarios than previous techniques. Numerical ex-
+ever, choosing the optimal diagonal loading factor in different scenarios
+                                                                                    amples show that the performance of the proposed beamforming algo-
+is a difficult task. Recently, the shrinkage estimate approach [5] can
+                                                                                    rithm is almost always close to optimal performance both at low and
+automatically compute the diagonal loading levels without specifying
+                                                                                    high SNR outperforming previously proposed robust beamformers. By
+any user parameters. Unfortunately, this only produces an estimate of
+                                                                                    combining the interference-plus-noise covariance matrix reconstruc-
+                                                                                    tion with improved estimate of the desired signal steering vector we
+   Manuscript received August 07, 2011; revised January 24, 2012; accepted          overcome the problem of desired signal self-cancelation at high SNR
+March 14, 2012. Date of publication April 09, 2012; date of current version         while maintaining the good performance at low SNR. This leads to
+June 12, 2012. The associate editor coordinating the review of this manuscript
+and approving it for publication was Dr. Konstantinos Slavakis. This research       improved performance over current approaches over a wide range of
+was supported by the Israeli Science Foundation under Grant 1240/09.                signal-to-interference-plus-noise ratios.
+   The authors are with the School of Engineering, Bar-Ilan University, Ramat-
+Gan, 52900, Israel (e-mail: guyujie@hotmail.com; leshem.amir1@gmail.com).
+   This paper has supplementary downloadable multimedia material available                                  II. THE SIGNAL MODEL
+at http://ieeexplore.ieee.org provided by the authors. This includes “additional      Assume that an array of M sensors receives signals from multiple
+                                                                                    narrowband sources. The array observation vector (k) 2 C M at time
+                                                                                                                                          x
+simulations.pdf,” which shows several other simulated experiments demon-
+strating the performance in other simulation scenarios.
+   Color versions of one or more of the figures in this correspondence are avail-   k can be modeled as
+able online at http://ieeexplore.ieee.org.
+   Digital Object Identifier 10.1109/TSP.2012.2194289                                                  x(k) = xs (k) + xi (k) + xn (k)                     (1)
+
+                                                                 1053-587X/$31.00 © 2012 IEEE
+  Authorized licensed use limited to: University Town Library of Shenzhen. Downloaded on August 20,2026 at 09:48:57 UTC from IEEE Xplore. Restrictions apply.
+3882                                                                                  IEEE TRANSACTIONS ON SIGNAL PROCESSING, VOL. 60, NO. 7, JULY 2012
+
+
+
+where xs (k), xi (k), and xn (k) are the statistically independent com-          and more pronounced with increases in SNR. This explains the per-
+ponents of the desired signal, interference, and noise, respectively. The        formance degradation of adaptive beamformers at high SNRs. There-
+desired signal can be written as xs (k) = as(k), where s(k) is the               fore, we will reconstruct the interference-plus-noise covariance matrix
+signal waveform and a 2 C M is the steering vector associated with the           Ri+n directly instead of searching for an optimal diagonal loading
+desired signal.                                                                  factor.
+   The adaptive beamformer output is given by                                       Recall that Ri+n = L            2                  2
+                                                                                                               l=1 l a(l )a (l ) + 0 I, where L is the
+                                                                                                                             H
+                                                                                                             2
+                                                                                 number of interferers, l is the power of the interference impinging
+                              y (k) = wH x(k)                             (2)    from direction l and a(l ) is the corresponding steering vector, 02
+                                                                                 is the noise power, and I is the identity matrix. Generally, the number
+where w = [w1 ; 1 1 1 ; wM ]T 2 C M is the beamformer weight vector              of interferers, as well as their actual steering vectors and powers, are
+and (1)T and (1)H denote the transpose and Hermitian transpose,                  usually unknown. Moreover, the noise power is also unknown. Hence,
+respectively. The optimal beamformer weight vector w can be ob-                  in order to reconstruct the interference-plus-noise covariance matrix
+tained by maximizing the output signal-to-interference-plus-noise                Ri+n , we need to know the spatial spectrum distribution over all pos-
+ratio (SINR)                                                                     sible directions. In this correspondence, we use the Capon spatial spec-
+                                                2                                trum estimator
+                                     s2 jwH aj
+                            SINR =                                        (3)
+                                     wH Ri+n w                                                            P^ () =
+                                                                                                                            1
+                                                                                                                                                            (6)
+                                                                                                                           ^ 01 d( )
+                                                                                                                     dH ()R
+                                            f
+where s2 is the signal power, Ri+n = E (xi (k) + xn (k))(xi (k) +
+                M 2M
+xn (k))H g2C           is the interference-plus-noise covariance matrix,         which is easy to obtain by substituting the Capon beamformer (5) back
+and E f1g is the statistical expectation. The problem of maximizing (3)          into the objective function of (4) with R^ . Aside from the Capon spa-
+is mathematically equivalent to the MVDR beamforming problem                     tial spectrum estimator (6), there are other candidate spatial spectrum
+                                                                                 estimators [12]. Using the Capon spatial spectrum (6), the interfer-
+                       H
+               min w
+                w          Ri+n w subject to wH a = 1;                    (4)    ence-plus-noise covariance matrix Ri+n can be reconstructed as
+
+and the solution is the MVDR beamformer, also referred to as the                                      R
+                                                                                                      ~ i+n =        P^ ()d()dH ()d
+Capon beamformer,                                                                                                
+                                                                                                                 2
+                                   R01 a                                                                             d()dH ()
+                            wopt = H i+0n1 ;                              (5)                                =
+                                                                                                                          ^ 01 d( )
+                                                                                                                                     d                     (7)
+                                  a Ri+n a                                                                       
+                                                                                                                   dH ( )R
+                                                                                                                 2
+which is a function of two factors Ri+n and a.
+                                                                                 where d() is the steering vector associated with a hypothetical direc-
+   Since Ri+n is unavailable even in signal-free applications,
+                                                                                 tion  based on the known array structure (note that for the specific di-
+it is usually replaced by the sample covariance matrix R        ^   =
+ 1    K                                                                          rection of the desired signal s a = d(s )), and 2 is the complement
+K     k=1 x (k )xH
+                   (k ) with   K  snapshots, and  the  corresponding
+                                                                                 sector of 2. That is to say, 2 [ 2   covers the whole spatial domain,
+adaptive beamformer wSMI = a RR
+                                    ^ a
+                                      ^ a is called the sample ma-               and 2 \ 2   is empty. Here, 2 is an angular sector in which the desired
+trix inversion (SMI) beamformer. Whenever the desired signal is                  signal is located. The desired signal DOA s can be estimated, for ex-
+present in the training samples, the SMI beamformer is in essence                ample, using low-resolution direction finding methods, and the width
+the MPDR beamformer [1] instead of the MVDR beamformer (4).                      of 2 is determined by the resolution of the array and the propagation
+As K increases, R  ^ converges to the theoretical covariance matrix
+                                                                                 environment. The main requirement is that the signal’s direction is in
+         2 H
+R = s aa + Ri+n , and the corresponding SINR will approx-                       2 while the interferers are not. Hence, R ~ i+n collects all information
+imate the optimal value as K ! 1 under stationary and ergodic                    on interference and noise in the out-of-sector 2 . Consequently, the ef-
+assumptions. However, when the sample size K is small, there is a                fect of the desired signal is removed from the reconstructed covariance
+large gap between R ^ and R. This gap is known to dramatically affect
+                                                                                 matrix, as long as the desired signal’s direction is located inside 2.
+the performance, especially when the signal is present in the training              Before continuing, we would like to point out that, in the case of look
+samples [4], [11]. Furthermore, using R ^ is much more sensitive to
+                                                                                 direction mismatch, the estimate of the interference covariance matrix
+steering vector errors [1], [10].                                                will be accurate, as long as the choice of 2 separates the interference
+                                                                                 from the desired signal. Similarly, in the case of local incoherent scat-
+                    III. THE PROPOSED ALGORITHM                                  tering effects, we expect the estimate to be very good. In the case of
+                                                                                 random steering vector errors, the effect of the random errors will be
+   In this section, a new adaptive beamforming algorithm is proposed.
+                                                                                 averaged over the various directions of the interference, therefore pro-
+The basic idea is to reconstruct the interference-plus-noise covariance
+                                                                                 viding reasonable estimates of the interference-plus-noise covariance
+matrix first, and then estimate the steering vector of the desired signal.
+                                                                                 matrix. These observations provide at list an insight into the ad hoc es-
+Therefore, the section is divided into two parts. First, we discuss the
+                                                                                 timate (7).
+problem of reconstructing the interference-plus-noise covariance ma-
+                                                                                    Using R ~ i+n (7) in lieu of R
+                                                                                                                 ^ in the SMI beamformer yields the in-
+trix. Then, we discuss the problem of estimating the signal steering
+                                                                                 terference-plus-noise covariance matrix reconstruction-based adaptive
+vector.
+                                                                                 beamformer
+A. Interference-Plus-Noise Covariance Matrix Reconstruction                                                               ~ 01 a
+                                                                                                                          R i+n 
+                                                                                                             wRec =         ~ 01 a
+                                                                                                                                                            (8)
+   Previous works on robust adaptive beamforming focused on finding                                                     aH R i+n 
+the optimal diagonal loading factor for the sample covariance matrix
+R^ , which inevitably resulted in performance degradation at high SNRs.                                             = d(s ).
+                                                                                 with the presumed steering vector a
+This degradation is caused by the fact that the signal is always present           The computational complexity of the proposed algorithm is
+in any kind of diagonal loading technique, and its effect becomes more           O(M 2 S ), where S is the number of sampling points in 2 during the
+  Authorized licensed use limited to: University Town Library of Shenzhen. Downloaded on August 20,2026 at 09:48:57 UTC from IEEE Xplore. Restrictions apply.
+IEEE TRANSACTIONS ON SIGNAL PROCESSING, VOL. 60, NO. 7, JULY 2012                                                                                              3883
+
+
+
+                                                                          TABLE I
+                                           RECONSTRUCTION-PLUS-ESTIMATION-BASED ADAPTIVE BEAMFORMING ALGORITHM
+
+
+
+
+                                               R
+reconstruction of covariance matrix ~ i+n (7). Typically, S     M . The                                                                                   p
+                                                                            O
+                                                                                           As we pointed out in [15], in some works on robust adaptive beam-
+computational complexity of the simplest SMI beamformer is (M 3 )
+                                                                                       kak p
+                                                                                       forming, the steering vector is assumed to have a fixed norm M , i.e.,
+mainly because of the matrix inversion operation [2]. Note, however,                         = M . Although it does relax the requirement that the received
+
+                                   O                                        
+that if the spatial estimate in the whole region is desired, the SMI                   signals from different sensors should have the same gain as the clas-
+beamformer has complexity (M 2 S ) as well, assuming S               M.                sical assumption in array signal processing, this norm constraint is still
+Therefore, the simplified version of our beamformer, obtained by (8),                  restrictive because in practical applications, e.g., in wireless communi-
+has complexity slightly larger than the SMI but significantly more                     cations, the gain perturbations of different sensors cannot be regarded
+robust performance.                                                                    as small as previously, and the norm constraint no longer holds. Hence,
+                                                    a
+   In practice, the presumed steering vector  is usually different than               unlike [9], [13], this norm constraint will not be used in our formula-
+                           a
+the actual steering vector . Therefore, in the following subsection, we                tion (10).
+will estimate the actual steering vector of the signal using the recon-                                            e
+                                                                                           The mismatch vector can be further decomposed into two compo-
+                               R
+structed covariance matrix ~ i+n (7). This provides additional beam-                                              e                      a
+                                                                                       nents. One denoted by ? is orthogonal to  , and the other denoted by
+forming gain at the expense of increased computational complexity.                     e                 ae
+                                                                                         k is parallel to  . k does not affect the beamforming quality because
+                                                                                                              a
+                                                                                       it is a scaled copy of  and any scaling of the steering vector does not
+                                                                                       impact the SINR. Therefore, the optimization problem (10) can be fur-
+B. Desired Signal Steering Vector Estimation
+                                                                                                                                                  e
+                                                                                       ther simplified to search for the orthogonal component ? by solving
+   The actual steering vector is difficult to obtain in practical applica-             the following problem:
+tions by simply using the nominal DOA of the signal because of the
+complex propagation environment. Hence, here we will correct the pre-                          min
+                                                                                                e
+                                                                                                           a e? ) R~ 0+1 (a + e? )
+                                                                                                              ( +       H
+                                                                                                                             i   n
+
+sumed steering vector to maximize the beamformer output power.
+                                                                                               subject to       a e? = 0;
+                                                                                                                       H
+   Substituting the Capon beamformer (5) with the reconstructed co-
+                  R
+variance matrix ~ i+n (7) back into the objective function of (4), the                                     a + e?) R~ + (a + e?)  a R~ + a
+                                                                                                          (            H
+                                                                                                                             i   n
+                                                                                                                                              H
+                                                                                                                                                   i   n       (11)
+beamformer output power is
+                                                                                                                                         
+                                                                                       where the equality constraint is introduced to maintain the orthogo-
+
+                               a       1
+                           P~ ( ) = H ~ 01
+                                                                                                         e         a
+                                                                                       nality between ? and  . Because ~ i+n    R      0 is a positive-definite
+                                        i+na R a                                 (9)   matrix, the optimization problem (11) is a feasible quadratically con-
+                                                                                       strained quadratic programming (QCQP) problem and can be easily
+                                                        a
+which now is a function of the steering vector not just the nominal                    solved using convex optimization software, such as CVX [14].
+                                                        a
+DOA  as in Section III-A. The steering vector can be estimated by                        Except the two constraints in (11), we do not need any other con-
+                  a
+maximizing P~ ( ) or, equivalently, by minimizing the denominator of                   straint. Hence, the additional eigendecomposition of the covariance
+   a                                                    a 0
+P~ ( ). In order to exclude the trivial solution = , the presumed                      matrix in [9], [13], [15] is effectively avoided in our approach. Con-
+                  a
+steering vector  should be utilized, which can be obtained from the                   sidering that the objective of the beamformer design is to maximize
+nominal DOA of the signal with the known array structure. Specifi-                                                                   a
+                                                                                       SINR (3), the presumed steering vector  is corrected as
+                                                        a
+cally, the optimization problem of estimating can be transformed to                                                    a~ = a + e?
+estimate the mismatch vector as    e                                                                                                                           (12)
+
+                                                                                       as soon as the problem (11) is solved. Here, we emphasize once again
+                                                                                                                          ka~k = 1 is unnecessary, because we
+          min         ( + )H ~ i0+1n ( + )
+                    a e R a e                                                          that the normalization operation p   M
+            e
+                      a + e) R~ + (a + e)  a R~ + a
+                                   H                        H
+                                                                                       do not know a priori the norm of the actual steering vector and more im-
+          subject to (                    i   n                i   n           (10)   portantly, this normalization operation does not affect the beamformer
+                                                                                       output SINR at all. Hence, we can eliminate the iteration operation in
+
+jc()(a + e) d()j  jc()a d()j for all  2 2 with a weight
+where the inequality constraint is a single constraint expression of                   [9] and [13].
+              H                        H
+                                                                                          Up to now, both the reconstructed interference-plus-noise covari-
+coefficient c() = P^ (), which can be used to prevent the corrected                                R                                                 a
+                                                                                       ance matrix ~ i+n (7) and the corrected steering vector ~ (12) have
+                  a e
+steering vector  + from converging to any interference located in 2   .              been obtained. Substituting them back into the Capon beamformer (5)
+Here, the choice of c() is based on the fact that the interference with               together, the adaptive beamformer based on covariance matrix recon-
+higher power should be more suppressed. Furthermore, the resulting                     struction plus steering vector estimation can be computed as
+constraint matrix is just the reconstructed covariance matrix. If c()
+                                                                                                              w                   R a
+                                                                                                                                ~ 01 ~
+                                                                                                                Rec0Est = H ~i+0n1 :
+is chosen to be independent of  , e.g., c() = 1;         8 2
+                                                              , then the
+                                                             2                                                                   a R a                     (13)
+                                       a e Ca e
+inequality constraint becomes ( + ? )H  ( + ? )                H   a Ca                                                ~    i+n ~
+
+                               C        d d
+with the constraint matrix  = 2 () H ()d [9]. Basically, this                        The reconstruction-plus-estimation-based adaptive beamforming al-
+constraint boils down to the requirement that the weighted average                     gorithm is summarized in Table I. The computational complexity in
+angle between the corrected steering vector and the vectors in the                     this case is dominated by the solution of the QCQP problem, which is
+interference region will not increase relative to the average angle                    O(M 3:5 ). This makes the two step algorithm equivalent to other robust
+between the nominal steering vector and the same vectors.                              beamforming algorithms.
+  Authorized licensed use limited to: University Town Library of Shenzhen. Downloaded on August 20,2026 at 09:48:57 UTC from IEEE Xplore. Restrictions apply.
+3884                                                                                       IEEE TRANSACTIONS ON SIGNAL PROCESSING, VOL. 60, NO. 7, JULY 2012
+
+
+
+
+       Fig. 1. First example. (a) Output SINR versus input SNR; (b) deviations from optimal SINR versus SNR; (c) output SINR versus number of snapshots.
+
+
+
+                                IV. SIMULATION                                         output SINRs for the tested methods are illustrated against the number
+   In our simulations, a uniform linear array (ULA) with          = 10 M                            K
+                                                                                       of snapshots . It can be seen from these figures that the performances
+                                                                                       of the proposed beamformers are always close to the optimal SINR in a
+                                                                                       large range from 030 to 50 dB. Furthermore, the proposed algorithms
+omnidirectional sensors spaced a half wavelength apart is used. The
+additive noise is modeled as a complex circularly symmetric Gaussian
+                                                                                       enjoy much faster convergence rates than others. The signal power is
+                                                                                       100 times the interference power in the case of SNR = 50 dB, which
+zero-mean spatially and temporally white process. Two interfering
+sources are assumed to have DOAs 050 and 020 , respectively.
+                                                                                       can be used to illustrate the situation when the signal-to-interference
+                                                                                       ratio (SIR) approaches 1.
+The interference-to-noise ratio (INR) in each sensor is equal to 30 dB.
+The desired signal is assumed to be a plane-wave from the presumed
+             
+direction s = 5 . When comparing the performance of the adaptive
+                                                                                       B. Example 2: Signal Spatial Signature Mismatch due to Incoherent
+beamforming algorithms in terms of the number of samples, the
+SNR in each sensor is set to be fixed at 20 dB. In the performance                     Local Scattering
+comparison of mean output SINR versus the input SNR, the number of
+                            K
+                                                                                          A distributed or incoherent scattered source arises mainly from the
+snapshots is fixed to be      = 30. For each scenario, 200 Monte-Carlo                 multipath scattering effects caused by the presence of local scatterers,
+runs are performed.                                                                    which is also commonplace in radar, sonar, radio astronomy and wire-
+   The proposed beamformers (8) and (13) are compared to the                           less communications applications. In this example, we assume inco-
+eigenspace-based beamformer [16], the worst-case-based beamformer                      herent local scattering of the signal. The signal is assumed to have a
+[6], the sequential quadratic programming (SQP)-based beamformer                       time-varying spatial signature that is different for each data snapshot
+[9], the shrinkage estimation-based beamformer [5], and the iterative                  and is modeled as
+adaptive approach (IAA) beamformer [17]. In the SQP-based beam-
+                                                                                                                               4
+                                                                                                         a(k) = s0 (k)a +         s (k)d( )
+former and the proposed beamformers, the possible angular sector of
+                                              ;
+the desired signal is set to be 2 = [0 10 ] and the corresponding                                                                 p       p                (14)
+out-of-sector is 2                ;               ;
+                   = [090 0 ) [ (10 90 ]. The value = 0 1                    :                                         p=1
+
+and six dominant eigenvectors of the matrix           C
+                                                    = 2 ( ) H( )  d  d  d                 s k        s k ;p
+                                                                                       where 0 ( ) and p ( ) = 1, 2, 3, 4 are independently and identically
+are used in the SQP-based beamformer, and the value = 0 3 M                   :       distributed (i.i.d.) zero-mean complex Gaussian random variables inde-
+is used for the worst-case-based beamformer. The eigenspace-based
+                                                                                                                                        ;
+                                                                                       pendently drawn from a random generator N(0 1). The DOAs p =       ;p
+beamformer is assumed to know the number of interference sources.
+The optimal SINR (3) is also shown in all figures, which is calculated
+                                                                                                                                                ;
+                                                                                       1, 2, 3, 4 are independently normally distributed in N( s 4 ) in each
+                                                                                       simulation run. It should be pointed out that the beamformers are im-
+from the exact interference-plus-noise covariance matrix and the
+actual desired signal steering vector. CVX software [14] was used to                                                                                 
+                                                                                       plemented in a block adaptive manner, which means that p changes
+                                                                                       from run to run while remains fixed from snapshot to snapshot. At the
+solve these convex optimization problems. It should be emphasized
+                                                          a
+that in all simulations, the actual steering vector was not normalized                                                  s k         s k
+                                                                                       same time, the random variables 0 ( ) and p ( ) change not only from
+          a a M
+so that H =          was not always satisfied.                                         run to run but also from snapshot to snapshot. This corresponds to the
+                                                                                       case of incoherent local scattering [18]. In this scenario, the norm of
+A. Example 1: Random Signal and Interference Look                                                                          a
+                                                                                       the desired signal steering vector k k keeps changing from snapshot
+Direction Mismatch                                                                                                                                       R
+                                                                                       to snapshot. Due to the fact that the signal covariance matrix s is no
+                                                                                       longer a rank-one matrix in this scenario, the output SINR should be
+   In the first example, a scenario with random look direction mismatch
+                                                                                       rewritten as [11]
+is considered. The random DOA mismatch of both the desired signal
+                                                              ;
+and the interferers are uniformly distributed in [04 4 ]. That is to
+                                                                                                               SINR =
+                                                                                                                          wH Rs w
+                                                                  ;
+say, the DOA of the signal is uniformly distributed in [1 9 ], and the                                                 wH Ri+n w                           (15)
+DOAs of two interferences are uniformly distributed in [054 046 ]        ;
+              ;
+and [024 016 ], respectively. Here, the random DOAs of the signal                    instead of (3). The SINR (15) is maximized by [11]
+and the interferences change from run to run but remain fixed from
+snapshot to snapshot. Fig. 1(a) compares the output SINR of the afore-                                         wopt = P R0i+1n Rs                            (16)
+mentioned methods versus the SNR. Because the performance differ-
+ence is not straightforward especially at low SNRs, their deviations                   where Pf1g stands for the principal eigenvector of a matrix. It can be
+from the optimal SINR are compared in Fig. 1(b). In Fig. 1(c), the                     seen from Fig. 2 that although there are some performance degradations
+  Authorized licensed use limited to: University Town Library of Shenzhen. Downloaded on August 20,2026 at 09:48:57 UTC from IEEE Xplore. Restrictions apply.
+IEEE TRANSACTIONS ON SIGNAL PROCESSING, VOL. 60, NO. 7, JULY 2012                                                                                            3885
+
+
+
+
+  Fig. 2. Second example. (a) Output SINR versus input SNR; (b) deviations from optimal SINR versus SNR; (c) output SINR versus number of snapshots.
+
+
+
+with the increase in SNR compared to the optimal value, the proposed                 [5] P. Stoica, J. Li, X. Zhu, and J. R. Guerci, “On using a priori knowledge
+beamforming algorithms still outperform the other methods tested.                        in space-time adaptive processing,” IEEE Trans. Signal Process., vol.
+   The simulation results clearly demonstrate that the proposed beam-                    56, no. 6, pp. 2598–2602, Jun. 2008.
+                                                                                     [6] S. A. Vorobyov, A. B. Gershman, and Z. Q. Luo, “Robust adaptive
+formers outperform all other existing beamformers, and achieve per-                      beamforming using worst-case performance optimization: A solution
+formance that is consistently close to the optimal SINR for all values                   to the signal mismatch problem,” IEEE Trans. Signal Process., vol. 51,
+of SNR from 030 to 50 dB, which illustrates its high dynamic range.                      no. 2, pp. 313–324, Feb. 2003.
+Specifically,                                                                        [7] J. Li, P. Stoica, and Z. Wang, “On robust Capon beamforming and
+                                                                                         diagonal loading,” IEEE Trans. Signal Process., vol. 51, no. 7, pp.
+
+                      SINRRec0Est ' kak2 SNR:
+                                                                                         1702–1715, Jul. 2003.
+                                                                        (17)         [8] R. G. Lorenz and S. P. Boyd, “Robust minimum variance beam-
+                                                                                         forming,” IEEE Trans. Signal Process., vol. 53, no. 5, pp. 1684–1696,
+                                                                                         May 2005.
+In the first example, the actual steering vector satisfies the norm con-             [9] A. Hassanien, S. Vorobyov, and K. M. Wong, “Robust adaptive beam-
+straint and hence, the array output SINRs are approximately 10 dB                        forming using sequential quadratic programming: An iterative solu-
+higher than the SNR. By contrast, in the second example, the norm of                     tion to the mismatch problem,” IEEE Signal Process. Lett., vol. 15, pp.
+the actual steering vector is magnified due to the effect of incoherent                  733–736, 2008.
+local scattering and the output SINRs of all tested beamformers are                 [10] L. Ehrenberg, S. Gannot, A. Leshem, and E. Zehavi, “Sensitivity
+                                                                                         analysis of MVDR and MPDR beamformers,” presented at the IEEE
+subsequently scaled up.                                                                  26th Convention of Electr. Electron. Eng. in Israel, Eliat, Israel, Nov.
+                                                                                         2010.
+                            V. CONCLUSION                                           [11] A. B. Gershman, “Robust adaptive beamforming in sensor arrays,” Int.
+   In this correspondence, we proposed an effective adaptive beam-                       J. Electron. Commun., vol. 53, pp. 305–314, Dec. 1999.
+forming algorithm, which is robust not only to covariance matrix uncer-             [12] P. Stoica and R. L. Moses, Introduction to Spectral Analysis. Engle-
+                                                                                         wood Cliffs, NJ: Prentice-Hall, 1997.
+tainty but also to steering vector mismatch. With the knowledge of the              [13] Y. J. Gu, W. P. Zhu, and M. N. S. Swamy, “Adaptive beamforming
+presumed DOA of the desired signal, the interference-plus-noise co-                      with joint robustness against covariance matrix uncertainty and signal
+variance matrix can be reconstructed based on the spatial spectrum dis-                  steering vector mismatch,” Electron. Lett., vol. 46, no. 1, pp. 86–88,
+tribution, which provides a quasi signal-free environment. Based on the                  Jan. 2010.
+reconstructed covariance matrix, the presumed steering vector of the                [14] M. Grant, S. Boyd, and Y. Y. Ye, CVX: MATLAB software for dis-
+                                                                                         ciplined convex programming, Feb. 2007 [Online]. Available: http://
+signal is corrected to maximize the array output power. In contrast to                   www.stanford.edu/boyd/cvx/V.1.0RC3
+other algorithms, the proposed adaptive beamforming algorithm does                  [15] Y. Gu and A. Leshem, “Robust adaptive beamforming based on jointly
+not need the norm constraint of the steering vector, which thus widely                   estimating covariance matrix and steering vector,” in Proc. Int. Conf.
+extends its applicability. The simulation results demonstrate that the                   Acoust., Speech, Signal Process. (ICASSP), Prague, Czech Republic,
+performance of proposed adaptive beamformer is almost always close                       May 2011, pp. 2640–2643.
+                                                                                    [16] D. D. Feldman and L. J. Griffiths, “A projection approach to robust
+to optimal in a very large range of SNR.                                                 adaptive beamforming,” IEEE Trans. Signal Process., vol. 42, no. 4,
+                                                                                         pp. 867–876, Apr. 1994.
+                           ACKNOWLEDGMENT                                           [17] T. Yardibi, J. Li, P. Stoica, M. Xue, and A. B. Baggeroer, “Source
+  The authors would like to thank the associate editor Prof. Sal-                        localization and sensing: A nonparametric iterative adaptive approach
+vakis and the anonymous reviewers for their helpful comments and                         based on weighted least squares,” IEEE Trans. Aerosp. Electron. Syst.,
+                                                                                         vol. 46, no. 1, pp. 425–443, Jan. 2010.
+suggestions.
+                                                                                    [18] O. Besson and P. Stoica, “Decoupled estimation of DOA and angular
+                                                                                         spread for a spatially distributed source,” IEEE Trans. Signal Process.,
+                              REFERENCES                                                 vol. 48, no. 7, pp. 1872–1882, Jul. 2000.
+    [1] H. L. Van Trees, Detection, Estimation, and Modulation Theory, Part         [19] A. Khabbazibasmenj, S. A. Vorobyov, and A. Hassanien, “Robust
+        IV: Optimum Array Processing. New York: Wiley, 2002.                             adaptive beamforming via estimating steering vector based on
+    [2] Robust Adaptive Beamforming, J. Li and P. Stocia, Eds. New York:                 semidefinite relaxation,” in Proc. 44th Annu. Asilomar Conf. Sig-
+        Wiley, 2005.                                                                     nals, Syst.s, Comput., Pacific Grove, CA, Nov. 7–10, 2010, pp.
+    [3] J. Capon, “High-resolution frequency-wavenumber spectrum anal-                   1102–1106.
+        ysis,” Proc. IEEE, vol. 57, no. 8, pp. 1408–1418, Aug. 1969.                [20] R. Mallipeddi, J. P. Lie, P. N. Suganthan, S. G. Razul, and C. M. S. See,
+    [4] H. Cox, R. M. Zeskind, and M. H. Owen, “Robust adaptive beam-                    “Robust adaptive beamforming based on covariance matrix reconstruc-
+        forming,” IEEE Trans. Acoust., Speech, Signal Process., vol. ASSP-35,            tion for look direction mismatch,” Progr. Electromagn. Res.—Lett., vol.
+        no. 10, pp. 1365–1376, Oct. 1987.                                                25, pp. 37–46, 2011.
+  Authorized licensed use limited to: University Town Library of Shenzhen. Downloaded on August 20,2026 at 09:48:57 UTC from IEEE Xplore. Restrictions apply.
+

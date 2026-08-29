@@ -359,6 +359,39 @@ NSB使用配置中的标称期望和干扰方向；NLMS与RLS使用已知期望Q
 INCM基线。除Oracle外，所有方法均不能读取当前试次真实姿态、真实方向
 或真实INCM。
 
+## 10.2 经典方法参数筛选与锁定验证
+
+`runClassicJitterParameterStudy.m`在同一批配对观测上分别筛选DL-MVDR、
+ESP、WCO和静态INCM参数，并在筛选后调用 `runClassicJitterSweep.m`生成
+正式实验6结果。所有候选范围集中配置在
+`cfg.experiments.classicTuning`，实验函数内部不散落数值参数。
+
+推荐按“smoke筛选、preliminary锁定验证”的顺序运行：
+
+```matlab
+startup;
+smokeStudy = runClassicJitterParameterStudy(config("smoke"), []);
+preliminaryStudy = runClassicJitterParameterStudy( ...
+    config("preliminary"), smokeStudy.selections);
+```
+
+评分规则固定为“所有抖动扫描点中位SINR的最小值”，优先保证整条曲线
+稳定。静态INCM按谱加载、期望区半宽和收缩系数的固定顺序执行坐标筛选；
+其他三种方法分别在自身候选范围内取最优值，不能故意选择较差参数。
+WCO候选若使离线标定半径达到或超过参考导向矢量范数，将在候选表中明确
+标记为不可行，不参与排名，也不会静默删除。
+
+相关模块包括：
+
+- `screenClassicParameters.m`：无绘图候选评价、评分和参数锁定；
+- `applyClassicParameterSelection.m`：把smoke锁定参数原样应用到其他profile；
+- `runClassicJitterParameterStudy.m`：组织两种快拍数、正式实验和分目录输出。
+
+研究结果分别保存到
+`results/classic_parameter_study/<profile>/L8`和 `L64`，总排名表保存在
+对应profile目录。当前实测结论和解释边界见
+[经典方法参数研究结果](docs/classic_parameter_study_results.md)。
+
 ## 11. 结果文件
 
 每个实验成功后生成：
@@ -369,6 +402,9 @@ INCM基线。除Oracle外，所有方法均不能读取当前试次真实姿态�
 - `results/figures/*.pdf`：矢量PDF；
 - `results/figures/*.png`：预览图；
 - `results/logs/*.json`：结果状态和文件路径清单。
+
+经典参数研究采用独立的 `results/classic_parameter_study` 子目录，避免
+覆盖用户直接运行实验6产生的同名结果。
 
 结果发布采用“全部暂存完成后再提交”的方式，避免部分文件成功、部分文件失败却被误认为完整实验。
 

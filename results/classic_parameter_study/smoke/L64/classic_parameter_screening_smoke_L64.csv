@@ -1,0 +1,27 @@
+method,stage,parameterName,parameterValue,minimumPointMedianSinrDb,overallMedianSinrDb,meanPointMedianSinrDb,targetMet,validCandidate,errorIdentifier,errorMessage,epsilonS,runtimeSec,selectedForStage
+dl_mvdr,dl_loading,dlDiagonalLoading,0.001,-0.16401662705956,8.8686024862664,7.86644499279712,0,1,,,1.84431634417053,0.2399677,0
+dl_mvdr,dl_loading,dlDiagonalLoading,0.01,10.2237596475486,13.3186793587187,13.2899202252761,0,1,,,1.84431634417053,0.2022746,0
+dl_mvdr,dl_loading,dlDiagonalLoading,0.1,12.0429018009287,13.7648836439492,13.7825368376168,0,1,,,1.84431634417053,0.1998295,1
+dl_mvdr,dl_loading,dlDiagonalLoading,1,2.3791409412053,6.98727668046135,6.7863699235699,0,1,,,1.84431634417053,0.1958326,0
+esp,subspace_dimension,espSignalSubspaceDimension,2,-37.4240228397961,-33.7283676036413,-34.1673052852261,0,1,,,1.84431634417053,0.2117893,0
+esp,subspace_dimension,espSignalSubspaceDimension,3,11.9710470839879,14.0913362402175,14.00994763829,0,1,,,1.84431634417053,0.2119925,1
+esp,subspace_dimension,espSignalSubspaceDimension,4,0.668971535562387,10.5816011288634,9.43982010832047,0,1,,,1.84431634417053,0.2042464,0
+esp,subspace_dimension,espSignalSubspaceDimension,5,-1.29612832949857,8.38893572874212,6.59267277021061,0,1,,,1.84431634417053,0.1891384,0
+wco,design_jitter_rms_deg,wcoDesignJitterStdDeg,2,9.50276085099623,13.6681441679744,13.4329830879545,0,1,,,0.93665927243672,7.2009798,0
+wco,design_jitter_rms_deg,wcoDesignJitterStdDeg,4,12.1071271914314,14.0780797263561,13.8361500921197,0,1,,,1.84431634417053,7.5458867,1
+wco,design_jitter_rms_deg,wcoDesignJitterStdDeg,6,4.26188425475578,10.7176230879172,10.2393738957493,0,1,,,2.67004370575513,10.0850778,0
+wco,design_jitter_rms_deg,wcoDesignJitterStdDeg,8,NaN,NaN,NaN,0,0,uav:beamforming:InfeasibleCalibration,The calibrated epsilon must be finite and smaller than ||aRef||.,NaN,NaN,0
+static_incm_mvdr,spectrum_loading,staticSpectrumDiagonalLoading,0.001,-3.36471202460248,0.588684370077524,0.0802333822033847,0,1,,,1.84431634417053,0.2578115,0
+static_incm_mvdr,spectrum_loading,staticSpectrumDiagonalLoading,0.01,-1.3573470411639,2.16116138554301,1.77748655636169,0,1,,,1.84431634417053,0.2316611,1
+static_incm_mvdr,spectrum_loading,staticSpectrumDiagonalLoading,0.1,-1.38236324785533,1.21678957170807,1.46387294204392,0,1,,,1.84431634417053,0.2261543,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,5,-1.35832736605127,2.1412399603973,1.78484701608647,0,1,,,1.84431634417053,0.2402587,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,7,-1.3573470411639,2.16116138554301,1.77748655636169,0,1,,,1.84431634417053,0.2541141,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,10,-1.26023962027295,2.22587723707266,1.90302574924464,0,1,,,1.84431634417053,0.2670112,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,12,-1.13067179322528,2.37540836603925,1.9762357841157,0,1,,,1.84431634417053,0.2856603,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,15,-1.20570444869439,2.18849869986802,1.82910180846426,0,1,,,1.84431634417053,0.2555582,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,20,-0.688507532751215,2.41775946753916,2.05719939778415,0,1,,,1.84431634417053,0.281316,0
+static_incm_mvdr,exclusion_half_width_deg,staticDesiredExclusionHalfWidthDeg,25,-0.177290668527507,2.28912868938087,1.97847160528667,0,1,,,1.84431634417053,0.2757065,1
+static_incm_mvdr,incm_shrinkage,staticIncmShrinkage,0,-0.0247298459075864,2.76690449866708,2.43722505591637,0,1,,,1.84431634417053,0.2947301,1
+static_incm_mvdr,incm_shrinkage,staticIncmShrinkage,0.05,-0.177290668527507,2.28912868938087,1.97847160528667,0,1,,,1.84431634417053,0.2820014,0
+static_incm_mvdr,incm_shrinkage,staticIncmShrinkage,0.1,-0.541025322121698,1.80947642939497,1.62510325452189,0,1,,,1.84431634417053,0.2305211,0
+static_incm_mvdr,incm_shrinkage,staticIncmShrinkage,0.2,-1.33926531389609,0.944653773786054,1.12061479807427,0,1,,,1.84431634417053,0.2434453,0

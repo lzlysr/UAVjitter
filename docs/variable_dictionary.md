@@ -28,6 +28,11 @@
 | `incmNmse` | 标量或数组 | 相对Frobenius误差的平方 | 指标 |
 | `exp02MethodNames` | `1×N_method`字符串 | 实验2实际计算、绘图和导出的方法子集及顺序 | 配置参数 |
 | `classicJitterMethodNames` | `1×N_method`字符串 | 独立经典方法抖动实验实际执行的方法及绘图顺序 | 配置参数 |
+| `classicTuning.snapshotCounts` | 正整数向量 | 经典参数研究分别评价的每周期快拍数，当前为8和64 | 配置参数 |
+| `classicTuning.scoreRule` | 字符串 | 参数筛选评分规则，固定为各抖动点中位SINR的最小值 | 配置参数 |
+| `minimumPointMedianSinrDb` | 标量 | 一条抖动扫描曲线中最低的逐点中位SINR | 参数筛选指标 |
+| `validCandidate` | 逻辑标量 | 参数候选是否满足标定和求解可行性 | 参数筛选诊断 |
+| `selection` | 结构体 | 对某一快拍数锁定的DL、ESP、WCO和静态INCM参数 | smoke输出/验证输入 |
 | `nlmsState` | 结构体 | NLMS上一周期权值 | 算法状态 |
 | `rlsState` | 结构体 | RLS上一周期权值和逆相关矩阵 | 算法状态 |
 | `epsilonS` | 标量 | WCO或鲁棒权值使用的球形导向不确定集半径 | 离线标定配置 |

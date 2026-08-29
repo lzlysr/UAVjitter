@@ -17,8 +17,9 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
         % 新实验必须提供完整默认集合，同时允许用户选择任意合法非空组合。
         function configAllowsSelectableClassicMethodCombinations(testCase)
             cfg = config('smoke');
-            expected = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", ...
-                "nlms", "rls", "pi", "dl_mvdr", "esp", "wco", ...
+            % 当前“已完成工作”图默认只比较用户指定的五种方法；合法全集
+            % 仍由配置校验器维护，用户可以继续改成任意非空且不重复子集。
+            expected = ["oracle", "dl_mvdr", "esp", "wco", ...
                 "static_incm_mvdr"];
 
             testCase.verifyEqual(cfg.experiments.classicJitterMethodNames, expected);
@@ -43,6 +44,122 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             unknown.experiments.classicJitterMethodNames = "unknown";
             testCase.verifyError(@() uav.config.validate(unknown), ...
                 'uav:config:InvalidExperimentParameter');
+        end
+
+        % 参数筛选范围必须集中保存在config.m中，并拒绝会破坏公平筛选的
+        % 空候选集或未知评分规则。
+        function classicTuningConfigurationIsValidated(testCase)
+            cfg = config('smoke');
+            tuning = cfg.experiments.classicTuning;
+
+            testCase.verifyEqual(tuning.snapshotCounts, [8, 64]);
+            testCase.verifyEqual(tuning.scoreRule, "minimum-point-median");
+            testCase.verifyEqual(tuning.targetMinimumMedianSinrDb, 15);
+            testCase.verifyNotEmpty(tuning.dlLoadingCandidates);
+            testCase.verifyNotEmpty(tuning.espDimensionCandidates);
+            testCase.verifyNotEmpty(tuning.wcoDesignJitterStdDegCandidates);
+            testCase.verifyNotEmpty(tuning.staticSpectrumLoadingCandidates);
+            testCase.verifyNotEmpty(tuning.staticExclusionHalfWidthDegCandidates);
+            testCase.verifyNotEmpty(tuning.staticShrinkageCandidates);
+
+            invalid = cfg;
+            invalid.experiments.classicTuning.dlLoadingCandidates = [];
+            testCase.verifyError(@() uav.config.validate(invalid), ...
+                'uav:config:InvalidExperimentParameter');
+
+            invalid = cfg;
+            invalid.experiments.classicTuning.scoreRule = "unknown";
+            testCase.verifyError(@() uav.config.validate(invalid), ...
+                'uav:config:InvalidExperimentParameter');
+        end
+
+        % 小规模筛选应逐方法返回候选排名，并将选中参数完整应用到一套
+        % 可供runClassicJitterSweep正式运行的锁定配置中。
+        function classicParameterScreeningReturnsLockedConfiguration(testCase)
+            cfg = compactClassicConfig(testCase);
+            cfg.experiments.jitterSweepDeg = [0, 1];
+            cfg.experiments.classicTuning.dlLoadingCandidates = 0.02;
+            cfg.experiments.classicTuning.espDimensionCandidates = 2;
+            % 第二个WCO候选会令离线半径超过||aRef||，筛选器应记录为
+            % 不可行而不是中断其余候选和后续静态INCM筛选。
+            cfg.experiments.classicTuning.wcoDesignJitterStdDegCandidates = ...
+                [3, 100];
+            cfg.experiments.classicTuning.staticSpectrumLoadingCandidates = 0.03;
+            cfg.experiments.classicTuning.staticExclusionHalfWidthDegCandidates = 6;
+            cfg.experiments.classicTuning.staticShrinkageCandidates = 0.1;
+            cfg = uav.config.validate(cfg);
+
+            screening = uav.experiment.screenClassicParameters(cfg, 8);
+
+            testCase.verifyEqual(screening.snapshotCount, 8);
+            testCase.verifyEqual(screening.scoreRule, "minimum-point-median");
+            testCase.verifyEqual(unique(screening.ranking.method, 'stable'), ...
+                ["dl_mvdr"; "esp"; "wco"; "static_incm_mvdr"]);
+            testCase.verifyTrue(all(isfinite( ...
+                screening.ranking.minimumPointMedianSinrDb( ...
+                screening.ranking.validCandidate))));
+            wcoRows = screening.ranking.method == "wco";
+            testCase.verifyEqual(sum(wcoRows), 2);
+            testCase.verifyEqual(sum(~screening.ranking.validCandidate(wcoRows)), 1);
+            testCase.verifyNotEmpty( ...
+                screening.ranking.errorIdentifier(~screening.ranking.validCandidate));
+            testCase.verifyEqual(screening.selection.dlDiagonalLoading, 0.02);
+            testCase.verifyEqual(screening.selection.espSignalSubspaceDimension, 2);
+            testCase.verifyEqual(screening.selection.wcoDesignJitterStdDeg, 3);
+            testCase.verifyEqual( ...
+                screening.selection.staticSpectrumDiagonalLoading, 0.03);
+            testCase.verifyEqual( ...
+                screening.selection.staticDesiredExclusionHalfWidthDeg, 6);
+            testCase.verifyEqual(screening.selection.staticIncmShrinkage, 0.1);
+
+            locked = uav.experiment.applyClassicParameterSelection( ...
+                config('preliminary'), screening.selection);
+            testCase.verifyEqual(locked.timeline.L, 8);
+            testCase.verifyEqual(locked.beamforming.diagonalLoading, 0.02);
+            testCase.verifyEqual( ...
+                locked.beamforming.classic.esp.signalSubspaceDimension, 2);
+            testCase.verifyEqual( ...
+                locked.beamforming.calibration.designJitterStdDeg, [3, 3, 3]);
+            testCase.verifyEqual(locked.spectrum.diagonalLoading, 0.03);
+            testCase.verifyEqual(locked.spectrum.desiredExclusionHalfWidthDeg, 6);
+            testCase.verifyEqual(locked.incm.shrinkage, 0.1);
+        end
+
+        % smoke研究应产生正式实验6结果；preliminary阶段接收smoke锁定值后
+        % 必须跳过重新筛选，并保持所有算法参数逐元素一致。
+        function parameterStudyLocksSmokeSelectionForValidation(testCase)
+            cfg = compactClassicConfig(testCase);
+            cfg.experiments.jitterSweepDeg = [0, 1];
+            cfg.experiments.classicTuning.snapshotCounts = 8;
+            cfg.experiments.classicTuning.dlLoadingCandidates = 0.02;
+            cfg.experiments.classicTuning.espDimensionCandidates = 2;
+            cfg.experiments.classicTuning.wcoDesignJitterStdDegCandidates = 3;
+            cfg.experiments.classicTuning.staticSpectrumLoadingCandidates = 0.03;
+            cfg.experiments.classicTuning.staticExclusionHalfWidthDegCandidates = 6;
+            cfg.experiments.classicTuning.staticShrinkageCandidates = 0.1;
+            cfg = uav.config.validate(cfg);
+
+            smokeStudy = runClassicJitterParameterStudy(cfg, []);
+            testCase.verifyEqual(numel(smokeStudy.scenarios), 1);
+            testCase.verifyFalse(isempty(smokeStudy.scenarios(1).screening));
+            testCase.verifyTrue(isfile(smokeStudy.artifacts.mat));
+            testCase.verifyTrue(isfile(smokeStudy.artifacts.csv));
+            testCase.verifyTrue(isfile( ...
+                smokeStudy.scenarios(1).screeningArtifacts.csv));
+
+            validationCfg = cfg;
+            validationCfg.profile = "preliminary";
+            validationCfg = uav.config.validate(validationCfg);
+            validationStudy = runClassicJitterParameterStudy( ...
+                validationCfg, smokeStudy.selections);
+
+            testCase.verifyEmpty(validationStudy.scenarios(1).screening);
+            testCase.verifyEqual(validationStudy.selections, ...
+                smokeStudy.selections);
+            testCase.verifyEqual( ...
+                validationStudy.scenarios(1).formalResult.cfg.timeline.L, 8);
+            testCase.verifyEqual( ...
+                validationStudy.scenarios(1).formalResult.cfg.incm.shrinkage, 0.1);
         end
 
         % NSB必须在标称期望方向保持单位响应，并在标称干扰方向形成零陷。
@@ -181,6 +298,37 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             testCase.verifyFalse(any(uav.experiment.entryPoints() == ...
                 "exp06_classic_method_jitter_sweep"));
         end
+
+        % 经典方法抖动图中每种方法必须具有不同线型/标记组合，且Oracle
+        % 上界固定使用黑色虚线，避免方法子集变化后难以辨认。
+        function classicCurvesUseDistinctStyles(testCase)
+            cfg = compactClassicConfig(testCase);
+            cfg.experiments.jitterSweepDeg = [0, 1];
+            cfg.experiments.classicJitterMethodNames = ["oracle", "nsb", ...
+                "frozen_mvdr", "scm_mvdr", "nlms", "rls", "pi", ...
+                "dl_mvdr", "esp", "wco", "static_incm_mvdr"];
+            cfg = uav.config.validate(cfg);
+
+            result = exp06_classic_method_jitter_sweep(cfg);
+            fig = openfig(result.artifacts.fig, 'invisible');
+            testCase.addTeardown(@() closeFigureIfValid(fig));
+            axesHandle = findall(fig, 'Type', 'axes');
+            lines = findall(axesHandle(1), 'Type', 'line');
+            % axes.Children按绘制顺序逆序保存，恢复为方法配置顺序。
+            lines = lines(end:-1:1);
+            styleKeys = strings(1, numel(lines));
+            for index = 1:numel(lines)
+                styleKeys(index) = string(lines(index).LineStyle) + "|" + ...
+                    string(lines(index).Marker);
+            end
+
+            testCase.verifyEqual(numel(lines), ...
+                numel(cfg.experiments.classicJitterMethodNames));
+            testCase.verifyEqual(numel(unique(styleKeys)), numel(lines));
+            testCase.verifyEqual(lines(1).Color, [0, 0, 0], ...
+                'AbsTol', 0);
+            testCase.verifyEqual(lines(1).LineStyle, '--');
+        end
     end
 end
 
@@ -216,5 +364,12 @@ function cleanupClassicDirectory(pathValue)
 %CLEANUPCLASSICDIRECTORY 删除测试独占且可完全重建的临时结果目录。
 if isfolder(pathValue)
     rmdir(pathValue, 's');
+end
+end
+
+function closeFigureIfValid(fig)
+%CLOSEFIGUREIFVALID 清理图形样式测试打开的FIG文件。
+if isgraphics(fig)
+    close(fig);
 end
 end

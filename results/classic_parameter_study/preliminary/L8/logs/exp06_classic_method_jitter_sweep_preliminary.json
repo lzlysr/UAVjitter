@@ -1,0 +1,14 @@
+{
+  "status": "complete",
+  "experimentName": "exp06_classic_method_jitter_sweep",
+  "profile": "preliminary",
+  "generatedAt": "2026-08-29T13:44:02.430Z",
+  "artifacts": {
+    "mat": "D:\\workspace\\UAVjitter\\results\\classic_parameter_study\\preliminary\\L8\\raw\\exp06_classic_method_jitter_sweep_preliminary.mat",
+    "csv": "D:\\workspace\\UAVjitter\\results\\classic_parameter_study\\preliminary\\L8\\tables\\exp06_classic_method_jitter_sweep_preliminary.csv",
+    "fig": "D:\\workspace\\UAVjitter\\results\\classic_parameter_study\\preliminary\\L8\\figures\\exp06_classic_method_jitter_sweep_preliminary.fig",
+    "pdf": "D:\\workspace\\UAVjitter\\results\\classic_parameter_study\\preliminary\\L8\\figures\\exp06_classic_method_jitter_sweep_preliminary.pdf",
+    "png": "D:\\workspace\\UAVjitter\\results\\classic_parameter_study\\preliminary\\L8\\figures\\exp06_classic_method_jitter_sweep_preliminary.png",
+    "log": "D:\\workspace\\UAVjitter\\results\\classic_parameter_study\\preliminary\\L8\\logs\\exp06_classic_method_jitter_sweep_preliminary.json"
+  }
+}
