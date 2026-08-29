@@ -238,6 +238,10 @@ D:\workspace\UAVjitter\
 - `runExp05.m`：模块消融的完整计算、配置诊断和导出逻辑。
 - `entryPoints.m`：返回五个实验入口的固定顺序，供 `run_all` 和集成测试使用。
 
+此外，`runClassicJitterSweep.m` 与 `experiments/exp06_classic_method_jitter_sweep.m`
+构成独立的经典方法退化实验。该实验不加入 `run_all`，只在用户明确调用
+时执行，并根据 `cfg.experiments.classicJitterMethodNames` 选择方法组合。
+
 #### 配置、随机性和统计汇总
 
 - `prepare.m`：重新校验实验配置，并在实验开始时只标定一次 `epsilonS`。
@@ -290,6 +294,12 @@ D:\workspace\UAVjitter\
 
 验证六方法和六消融变体的配对运行、随机子流独立再生、真值白名单、试次簇bootstrap、500×500统计规模、五个实验入口、完整结果格式、输出路径隔离、拒绝覆盖、事务回滚、备份清理失败和恢复失败等实验系统边界。
 
+### `TestTask6ClassicJitter.m`
+
+验证经典方法选择配置、NSB线性约束、NLMS/RLS训练参考递推、PI参考阵元
+约束、ESP子空间投影、WCO最坏情形响应约束、任意方法子集配对运行以及
+独立经典方法抖动扫描的结果文件。
+
 ## 10. 已实现的比较方法
 
 固定比较顺序为：
@@ -302,6 +312,33 @@ D:\workspace\UAVjitter\
 6. 时序稀疏结构约束INCM：谱对齐、时间连续稀疏增强、局部非均匀求积和结构投影。
 
 静态与时序INCM使用同一个鲁棒权值求解接口以及同一组 `gamma`、`epsilonS`，避免把权值求解器差异误认为INCM重构收益。
+
+## 10.1 独立经典方法退化实验
+
+经典方法实验支持以下11种方法标识：
+
+```matlab
+["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", "rls", ...
+ "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr"]
+```
+
+可以在调用前自由选择任意非空且不重复的组合，程序保持用户给出的顺序：
+
+```matlab
+cfg = config("smoke");
+cfg.experiments.classicJitterMethodNames = ...
+    ["oracle", "nsb", "scm_mvdr", "dl_mvdr", "wco", ...
+     "static_incm_mvdr"];
+cfg = uav.config.validate(cfg);
+result = exp06_classic_method_jitter_sweep(cfg);
+```
+
+NSB使用配置中的标称期望和干扰方向；NLMS与RLS使用已知期望QPSK训练
+序列；PI固定配置参考阵元；ESP使用配置的信号子空间维数；WCO采用离线
+固定的球形导向不确定集且不附加 `gamma` 正则项；`static_incm_mvdr`
+使用静态Capon-INCM重构和标准MVDR，因此不会把鲁棒权值收益混入普通
+INCM基线。除Oracle外，所有方法均不能读取当前试次真实姿态、真实方向
+或真实INCM。
 
 ## 11. 结果文件
 

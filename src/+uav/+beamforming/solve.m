@@ -1,5 +1,5 @@
 function [w, diagnostics] = solve(method, R, aRef, cfg)
-%SOLVE 统一求解MVDR、对角加载MVDR和鲁棒波束形成权值。
+%SOLVE 统一求解MVDR、对角加载MVDR、鲁棒权值和经典WCO权值。
 %   R    - M×M协方差或重构INCM；
 %   aRef - M×1名义期望导向矢量；
 %   w    - M×1复权值，采用w^H*x的接收约定。
@@ -18,10 +18,14 @@ switch method
     case "dlmvdr"
         [w, diagnostics] = solveClosedForm(R, aRef, cfg, "dlmvdr");
     case "robust"
-        [w, diagnostics] = solveRobust(R, aRef, cfg);
+        [w, diagnostics] = solveRobust(R, aRef, cfg, ...
+            cfg.beamforming.gamma, "robust");
+    case "wco"
+        % 经典WCO只使用球形导向不确定集，不叠加本课题的gamma正则项。
+        [w, diagnostics] = solveRobust(R, aRef, cfg, 0, "wco");
     otherwise
         error('uav:beamforming:UnsupportedMethod', ...
-            'Supported methods are "mvdr", "dlmvdr", and "robust".');
+            'Supported methods are "mvdr", "dlmvdr", "robust", and "wco".');
 end
 end
 
@@ -44,9 +48,8 @@ diagnostics = struct( ...
     'normalizer', normalizer);
 end
 
-function [w, diagnostics] = solveRobust(R, aRef, cfg)
+function [w, diagnostics] = solveRobust(R, aRef, cfg, gamma, methodName)
 epsilonS = cfg.beamforming.epsilonS;
-gamma = cfg.beamforming.gamma;
 referenceNorm = norm(aRef);
 inputScale = max(norm(R, 2), 1);
 psdTolerance = cfg.beamforming.covariancePsdTolerance * inputScale;
@@ -62,7 +65,7 @@ end
 if epsilonS == 0
     % 合同要求：不确定集半径为零时必须严格返回标准MVDR，gamma不参与。
     [w, diagnostics] = solveClosedForm(R, aRef, cfg, "mvdr");
-    diagnostics.method = "robust";
+    diagnostics.method = methodName;
     diagnostics.gamma = gamma;
     diagnostics.epsilonS = epsilonS;
     diagnostics.responseMargin = real(w' * aRef);
@@ -113,7 +116,7 @@ if responseMargin < 1 - solver.feasibilityTolerance
         'Robust response margin %.16g is infeasible.', responseMargin);
 end
 diagnostics = struct( ...
-    'method', "robust", ...
+    'method', methodName, ...
     'gamma', gamma, ...
     'epsilonS', epsilonS, ...
     'responseMargin', responseMargin, ...
