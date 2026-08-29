@@ -180,6 +180,7 @@ end
 end
 
 function scale = covarianceScale(R)
+% 计算协方差矩阵的平均功率，避免在病态情况下使用最大特征值。
 scale = max(real(trace(R)) / size(R, 1), eps);
 end
 

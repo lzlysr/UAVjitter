@@ -15,6 +15,7 @@ if interferencePlusNoisePower <= 0
         'trueIncm must yield positive interference-plus-noise output power.');
 end
 
+% interferenceLeakage 表示波束形成后，所有干扰信号残留在输出端的总功率，不包含期望信号和接收机噪声。
 if isempty(truth.interfererPowers)
     % J=0时“干扰泄漏”定义为0，但SINR分母仍包含噪声。
     interferenceLeakage = 0;

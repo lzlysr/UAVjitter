@@ -21,6 +21,7 @@ Qnu = Qeta - F * Qeta * F.';
 if any(diag(Qnu) < -eps(max(1, max(diag(Qeta)))))
     error('uav:scenario:InvalidAttitudeModel', 'Stationary innovation covariance is not PSD.');
 end
+% diag(Qnu) 取出三个轴的方差，然后再开平方得到三个轴的标准差
 innovationStd = sqrt(max(diag(Qnu), 0));
 
 attitudeOffsetRad = zeros(3, K);

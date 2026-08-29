@@ -13,6 +13,11 @@ if any(abs(vecnorm(uArray) - 1) > 1e-10)
 end
 
 % UPA位于阵列x-y平面，因此相位只由方向的x、y分量决定。
+% xi = uArray(1:2, :) 与下面写法数学上完全等价：
+% xi = [
+%     cos(elevationRad) .* cos(azimuthRad);
+%     cos(elevationRad) .* sin(azimuthRad)
+% ];
 xi = uArray(1:2, :);
 if any(sum(abs(xi).^2, 1) > 1 + 1e-10)
     error('uav:geometry:OutsideVisibleDisk', ...

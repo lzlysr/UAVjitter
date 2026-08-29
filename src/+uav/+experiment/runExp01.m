@@ -19,9 +19,12 @@ arrayResponse = zeros(sourceCount, periodCount);
 for periodIndex = 1:periodCount
     steering = scenario.steeringTruth(:, :, periodIndex);
     nominal = cfg.derived.nominalSteering;
+    % 对应式3-10的归一化导向失配程度，当前UPA导向矢量每个阵元幅度均为1，因此分母/sqrt(cfg.derived.M)就是公式中的分母
     % 除以sqrt(M)，得到不随阵元总数线性放大的归一化导向失配。
+    % mismatch：越小越好，0表示完全匹配；
     mismatch(:, periodIndex) = vecnorm(steering - nominal, 2, 1).' / sqrt(cfg.derived.M);
     % |a_nom^H a_true|^2/M^2：名义波束观察真实方向时的归一化响应。
+    % arrayResponse：越大越好，1表示名义阵列响应完全保持。
     arrayResponse(:, periodIndex) = ...
         abs(sum(conj(nominal) .* steering, 1)).'.^2 / cfg.derived.M^2;
 end

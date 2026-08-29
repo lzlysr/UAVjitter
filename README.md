@@ -14,6 +14,17 @@
 
 ## 2. 快速开始
 
+运行某个实验：
+```matlab
+cd('D:\workspace\UAVjitter')
+startup
+
+cfg = config("smoke");
+cfg.plot.visible = true;
+
+result = exp01_model_validation(cfg);
+```
+
 在 MATLAB 命令窗口中运行：
 
 ```matlab
