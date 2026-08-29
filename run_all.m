@@ -15,6 +15,8 @@ end
 
 startup;
 cfg = config(profile);
+% run_all属于批处理入口，每组实验完成导出后立即关闭图窗。
+cfg.plot.closeAfterExport = true;
 rootDir = cfg.output.rootDir;
 result = struct('profile', cfg.profile, 'tests', [], ...
     'experiments', strings(0, 1), 'artifacts', {cell(0, 1)});

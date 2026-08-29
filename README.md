@@ -25,6 +25,10 @@ cfg.plot.visible = true;
 result = exp01_model_validation(cfg);
 ```
 
+单独调用某个实验时，`cfg.plot.closeAfterExport` 默认为 `false`，因此可见
+图窗在结果导出后继续保留。`run_all(...)` 属于批处理入口，会自动把该
+开关设为 `true`，每组实验导出完成后立即关闭图窗，避免累计占用资源。
+
 在 MATLAB 命令窗口中运行：
 
 ```matlab
@@ -244,7 +248,7 @@ D:\workspace\UAVjitter\
 #### 元数据、绘图和结果发布
 
 - `metadata.m`：记录Git提交号、MATLAB版本、工具箱版本、随机种子方案、配置规模和生成时间。
-- `finalize.m`：把配置与元数据加入结果，调用导出器，并保证成功或失败后都关闭图窗。
+- `finalize.m`：把配置与元数据加入结果并调用导出器；导出失败时始终关闭图窗，导出成功后根据 `cfg.plot.closeAfterExport` 决定是否关闭。单实验默认保留，`run_all` 批处理自动关闭。
 - `writeArtifacts.m`：先在目标目录中生成完整临时结果包，再统一发布MAT、CSV、FIG、PDF、PNG和JSON。
 - `publishStagedBundle.m`：实现带提交点的结果发布事务；提交前失败时恢复旧文件，提交后备份清理失败时保留完整新结果和未删除备份。
 

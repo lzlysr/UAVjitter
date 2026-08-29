@@ -332,6 +332,26 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
             testCase.verifyFalse(isgraphics(failingFigure));
         end
 
+        % 单独运行实验且未要求导出后关闭时，统一收尾模块必须保留图窗。
+        function singleExperimentFinalizeKeepsFigureOpen(testCase)
+            cfg = compactConfig(testCase);
+            cfg.plot.closeAfterExport = false;
+            fig = figure('Visible', 'off');
+            plot([0, 1], [1, 2]);
+            testCase.addTeardown(@() closeIfValid(fig));
+            result = struct( ...
+                'experimentName', "single_experiment_figure_lifecycle", ...
+                'methodNames', strings(1, 0), ...
+                'raw', struct('value', 1), ...
+                'summary', struct('value', 1));
+            summary = table(1, 'VariableNames', {'value'});
+
+            uav.experiment.finalize(result, summary, fig, cfg, ...
+                struct('trials', 1), tic);
+
+            testCase.verifyTrue(isgraphics(fig, 'figure'));
+        end
+
         % 发布中途失败时必须恢复旧文件并清理暂存与备份。
         function failedBundlePublicationRestoresPreviousFiles(testCase)
             root = tempname;
