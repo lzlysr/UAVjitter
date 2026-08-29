@@ -1,58 +1,31 @@
-# Experiment protocol
+# 实验协议
 
-## Reproducibility and fairness
+## 可复现性与公平性
 
-All runs start from `cfg=config(profile)`. Base seed `20260827` and a validated
-substream scheme separate experiment, point, trial, scenario, period snapshot
-and bootstrap streams. Each trial/period observation is generated once and
-supplied unchanged to all methods or ablations. Method-specific seeds,
-geometry, source powers or retuning are forbidden.
+所有实验均从 `cfg=config(profile)` 开始。基种子固定为 `20260827`，并通过经过校验的子流方案隔离不同实验、扫描点、试次、场景、周期快照和自助抽样随机流。每个试次、每个周期的阵列观测只生成一次，并原样提供给全部比较方法或消融变体。禁止为不同方法使用不同的随机种子、几何关系、信号源功率或单独重新调参。
 
-The fixed methods are Oracle, frozen, SCM, DL, static and temporal. Oracle alone
-receives true INCM/ASV. Frozen retains first-period SCM-MVDR. SCM and DL use the
-current SCM and nominal reference. Static and temporal use identical fixed
-`gamma` and offline-calibrated `epsilonS`. Every same-period result checks the
-Oracle SINR upper bound within numerical tolerance.
+固定比较方法为Oracle、冻结权值、SCM、DL、静态INCM和时序INCM。只有Oracle可以读取真实INCM和真实导向矢量。冻结方法保留第一周期的SCM-MVDR权值；SCM和DL方法使用当前周期SCM与名义参考导向矢量；静态和时序INCM方法使用完全相同的固定 `gamma` 以及离线标定的 `epsilonS`。每个相同周期的结果都会在数值容差内检查Oracle输出SINR上界。
 
-SINR is stored and aggregated in the linear domain, then converted to dB. The
-95% interval is a deterministic paired cluster bootstrap: Monte Carlo trials
-are resampled as the independent unit, all periods in a selected trial stay
-together, and one trial-index draw is shared across methods.
+SINR首先在线性域保存和汇总，最后再转换成dB。95%置信区间采用确定性的配对簇自助法：蒙特卡洛试次作为独立重采样单位，被选中试次内的所有周期保持在一起，而且不同方法共享同一次试次索引抽样。
 
-## Profiles
+## 运行规模
 
-- `smoke`: three trials, reduced sweep/ablation periods, full 20-period dynamic
-  trace; pipeline validation only.
-- `preliminary`: 100 paired trials and 100 periods/point.
-- `paper`: 500 paired trials and 500 periods/point.
+- `smoke`：3次试验，缩短抖动扫描和消融的周期数，动态稳定性仍保留完整20周期；只用于验证整条运行流程。
+- `preliminary`：100次配对试验，每个扫描点100个周期。
+- `paper`：500次配对试验，每个扫描点500个周期。
 
-Main experiments use the configured 3x3 UPA; there is no array-size sweep.
-Actual counts are stored in metadata.
+主实验始终使用配置的 `3×3` UPA，不进行阵列规模扫描。实际试验次数和周期数保存在结果元数据中。
 
-## Experiments
+## 实验内容
 
-1. Model validation exports attitude, every source direction cosine, normalized
-   steering mismatch/array response, and a separate zero-jitter invariance test.
-2. Jitter sweep reports median SINR with paired 95% intervals, 5th percentile,
-   desired gain and interference leakage for all configured RMS points.
-3. Snapshot sweep reports SINR, INCM NMSE, minimum eigenvalue, condition number
-   and runtime for `L=[2,4,8,16,32,64]`.
-4. Dynamic stability reports per-period SINR, empirical CDF, 5th percentile,
-   outage probability, gain/leakage time series and mean/95th runtime.
-5. Ablation compares full temporal reconstruction with one-at-a-time changes:
-   `lambdaT=0`, identity alignment, uniform quadrature, no structure enhancement
-   and pilot projection on. Full-method pilot projection remains off.
+1. 模型验证实验导出三轴姿态、所有信号源的方向余弦、归一化导向矢量失配、归一化阵列响应，并独立执行零抖动不变性验证。
+2. 抖动扫描实验在所有配置的RMS扫描点上，比较六种方法的输出SINR中位数、配对95%置信区间、第5百分位、期望增益和干扰泄漏。
+3. 快拍扫描实验在 `L=[2,4,8,16,32,64]` 下比较输出SINR、INCM归一化均方误差、最小特征值、条件数和运行时间。
+4. 动态稳定性实验输出逐周期SINR、经验累积分布函数、第5百分位、低于阈值的概率、期望增益和干扰泄漏时序，以及平均和第95百分位运行时间。
+5. 消融实验将完整时序重构方法分别与以下单项变化比较：`lambdaT=0`、恒等谱对齐、均匀求积、关闭结构增强以及开启训练序列投影。完整方法默认关闭训练序列投影。
 
-## Result schema and interpretation
+## 结果结构与解释边界
 
-Each experiment writes `<experiment>_<profile>.mat/.csv/.fig/.pdf/.png/.json`.
-MAT contains calibrated cfg, code/environment metadata, substreams, raw
-trial-period metrics, summaries, timestamp and runtime. PDF is vector; FIG is
-editable; PNG is preview; CSV is compact summary; JSON is the manifest.
-Overwrite occurs only when `cfg.output.overwrite=true`.
+每个实验生成 `<实验名>_<运行规模>.mat/.csv/.fig/.pdf/.png/.json`。MAT文件包含完成标定的配置、代码与运行环境元数据、随机子流、逐试次逐周期原始指标、统计汇总、生成时间和运行时间。PDF为矢量图，FIG可在MATLAB中继续编辑，PNG用于预览，CSV保存紧凑汇总表，JSON保存结果清单。只有当 `cfg.output.overwrite=true` 时才允许覆盖同名结果。
 
-Do not use smoke plots to claim improvement. A defensible thesis statement
-requires paired preliminary/paper intervals that support the difference across
-the specified scans. Otherwise state only implementation completion and an
-observed trend. Results do not generalize beyond this narrowband, fixed-source,
-single-path cochannel model.
+不得使用 `smoke` 图宣称方法性能得到提升。只有当 `preliminary` 或 `paper` 的配对置信区间在规定扫描条件下支持差异时，才能形成可辩护的论文结论；否则只能表述为完成算法实现并观察到某种趋势。所有结果的适用范围仅限于当前窄带、世界坐标系信号源固定、单径同频干扰模型，不能直接推广到更复杂场景。

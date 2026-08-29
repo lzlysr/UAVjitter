@@ -1,33 +1,29 @@
-# Variable dictionary
+# 变量字典
 
-| Symbol / field | Size | Meaning | Access |
+| 符号或字段 | 尺寸 | 含义 | 可访问范围 |
 | --- | ---: | --- | --- |
-| `Nx, Ny` | scalar | UPA element counts along array x/y | config |
-| `M` | scalar | `Nx*Ny` sensors | derived config |
-| `J` | scalar | interferer count inferred from direction/INR arrays | derived config |
-| `K`, `L` | scalar | periods and snapshots per period | config / sweep |
-| `eta`, `DeltaEta` | `3 x K` | `[roll;pitch;yaw]` attitude and offset, radians | scenario truth |
-| `R_k` | `3 x 3` | array-to-world `Rz Ry Rx` rotation | scenario truth |
-| `uWorld` | `3 x (J+1)` | fixed world-frame unit directions | config prior |
-| `uArray_k` | `3 x (J+1)` | instantaneous array-frame directions | truth/diagnostics |
-| `xi_k` | `2 x (J+1)` | array-frame x/y direction cosines | truth/diagnostics |
-| `A_k` | `M x (J+1)` | true steering, desired first | Oracle/metrics |
-| `aRef` | `M x 1` | nominal desired steering reference | algorithm prior |
-| `X_k` | `M x L` | received complex snapshots | algorithm observation |
-| `Rx_k` | `M x M` | sample covariance `X X^H/L` | algorithm observation |
-| `Rin_k` | `M x M` | theoretical interference-plus-noise covariance | Oracle/metrics |
-| `RinHat_k` | `M x M` | reconstructed INCM | algorithm estimate |
-| `p_k`, `c_k` | grid matrix | residual Capon and enhanced temporal spectra | estimate/state |
-| `G_k` | shift diagnostic | previous-to-current spectrum alignment | estimate/state |
-| `w` | `M x 1` | complex beamforming weight | algorithm output |
-| `sinrLinear` | scalar/array | desired output / interference-plus-noise | primary raw metric |
-| `sinrDb` | scalar/array | `10*log10` after linear aggregation | reported metric |
-| `desiredGain` | scalar/array | `|w^H a_s|^2` | metric |
-| `interferenceLeakage` | scalar/array | total interferer output power, no receiver noise | metric |
-| `incmNmse` | scalar/array | squared relative Frobenius error | metric |
+| `Nx, Ny` | 标量 | UPA沿阵列坐标系x、y方向的阵元数 | 配置参数 |
+| `M` | 标量 | 阵元总数 `Nx*Ny` | 派生配置 |
+| `J` | 标量 | 根据干扰方向和INR数组推导的干扰数 | 派生配置 |
+| `K, L` | 标量 | 处理周期数和每周期快拍数 | 配置参数或扫描参数 |
+| `eta, DeltaEta` | `3×K` | `[横滚角;俯仰角;偏航角]`姿态及其偏差，单位为弧度 | 场景真值 |
+| `R_k` | `3×3` | 从阵列坐标系到世界坐标系的 `Rz Ry Rx` 旋转矩阵 | 场景真值 |
+| `uWorld` | `3×(J+1)` | 世界坐标系中的固定单位方向 | 配置先验 |
+| `uArray_k` | `3×(J+1)` | 当前周期在阵列坐标系中表示的方向 | 真值或诊断量 |
+| `xi_k` | `2×(J+1)` | 阵列坐标系x、y方向余弦 | 真值或诊断量 |
+| `A_k` | `M×(J+1)` | 真实导向矢量矩阵，第一列为期望信号 | Oracle或指标模块 |
+| `aRef` | `M×1` | 名义期望导向矢量参考 | 算法先验 |
+| `X_k` | `M×L` | 复数阵列接收快拍 | 算法观测 |
+| `Rx_k` | `M×M` | 样本协方差矩阵 `X X^H/L` | 算法观测 |
+| `Rin_k` | `M×M` | 理论干扰加噪声协方差矩阵 | Oracle或指标模块 |
+| `RinHat_k` | `M×M` | 重构得到的INCM | 算法估计量 |
+| `p_k, c_k` | 网格矩阵 | 残余Capon谱和时序增强谱 | 估计量或状态量 |
+| `G_k` | 平移诊断量 | 从上一周期空间谱到当前周期空间谱的对齐关系 | 估计量或状态量 |
+| `w` | `M×1` | 复波束形成权值 | 算法输出 |
+| `sinrLinear` | 标量或数组 | 期望输出功率与干扰加噪声输出功率之比 | 主要原始指标 |
+| `sinrDb` | 标量或数组 | 在线性域汇总后执行 `10*log10` 得到的指标 | 报告指标 |
+| `desiredGain` | 标量或数组 | 期望方向增益 `|w^H a_s|^2` | 指标 |
+| `interferenceLeakage` | 标量或数组 | 不含接收机噪声的总干扰输出功率 | 指标 |
+| `incmNmse` | 标量或数组 | 相对Frobenius误差的平方 | 指标 |
 
-Source columns are desired then configured interferers. Sensor order is
-`vx kron vy`. Raw experiment arrays lead with `trial x period`, followed by
-sweep point and method/variant where applicable. Snapshot signatures repeat
-across methods/variants to prove paired observations. NaN is allowed only for
-method-inapplicable INCM metrics; primary SINR/gain/leakage must be finite.
+信号源列顺序固定为期望信号在前，随后按配置顺序排列各干扰信号。传感器顺序为 `vx kron vy`。实验原始数组的前两维固定为 `试次×周期`，若存在扫描点和方法或消融变体，则依次放在后续维度。同一观测对应的快拍签名会复制到所有比较方法或变体，用于证明配对实验确实使用相同数据。只有不适用于某种方法的INCM指标允许使用NaN；主要SINR、期望增益和干扰泄漏必须为有限值。

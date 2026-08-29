@@ -1,55 +1,39 @@
-# Task 1 configuration and execution contract
+# 任务1：配置与执行契约
 
-## Configuration
+## 配置结构
 
-`cfg = config(profile)` accepts exactly `"smoke"`, `"preliminary"`, and
-`"paper"`.  Every profile contains these sections:
+`cfg = config(profile)` 只接受 `"smoke"`、`"preliminary"` 和 `"paper"` 三种运行规模。每种运行规模均包含以下配置分组：
 
-`random`, `array`, `timeline`, `attitude`, `sources`, `signal`, `spectrum`,
-`incm`, `beamforming`, `monteCarlo`, `experiments`, `plot`, and `output`.
+`random`、`array`、`timeline`、`attitude`、`sources`、`signal`、`spectrum`、`incm`、`beamforming`、`monteCarlo`、`experiments`、`plot` 和 `output`。
 
-`cfg.derived` is validation output, not an independent input source.  It holds
-the element count `M`, interferer count `J`, signal/noise powers, world and
-nominal array-frame unit vectors, nominal direction cosines, nominal steering
-vectors, and the desired nominal steering reference.
+`cfg.derived` 是配置校验产生的输出，不是独立的参数输入来源。它保存阵元总数 `M`、干扰数 `J`、信号与噪声功率、世界坐标系和名义阵列坐标系单位方向、名义方向余弦、名义导向矢量，以及期望信号名义参考导向矢量。
 
-The common physical defaults are:
+公共物理默认值如下：
 
-| Item | Value |
+| 参数 | 数值 |
 | --- | --- |
-| UPA | `Nx = Ny = 3`; spacing `[0.5, 0.5]` wavelengths |
-| Desired direction | azimuth/elevation `[0, -35]` degrees |
-| Interferers | `[40, -25]` and `[-55, -20]` degrees; INR `[20, 15]` dB |
-| Desired-link SNR | `10` dB |
-| Timeline | `dtSec = 1e-3`; `L = 8` snapshots per processing period |
-| Attitude correlation | `[0.95, 0.95, 0.98]` for roll, pitch, yaw |
-| Base seed | `20260827` |
-| Jitter sweep | `[0, 0.5, 1, 2, 4, 8]` degrees |
-| Snapshot sweep | `[2, 4, 8, 16, 32, 64]` |
+| UPA | `Nx = Ny = 3`；阵元间距为 `[0.5, 0.5]` 波长 |
+| 期望信号方向 | 方位角/高度角 `[0, -35]` 度 |
+| 干扰信号 | 方向为 `[40, -25]` 和 `[-55, -20]` 度；当前配置INR为 `[25, 25]` dB |
+| 期望链路SNR | `10` dB |
+| 时间轴 | `dtSec = 1e-3`；每个处理周期包含 `L = 8` 个快拍 |
+| 姿态相关系数 | 横滚、俯仰和偏航依次为 `[0.95, 0.95, 0.98]` |
+| 基种子 | `20260827` |
+| 抖动扫描 | `[0, 0.5, 1, 2, 4, 8]` 度 |
+| 快拍扫描 | `[2, 4, 8, 16, 32, 64]` |
 
-Profiles differ only in workload/grid-resolution values: smoke uses 3 trials,
-preliminary 100, and paper 500.  `K` and the lower-hemisphere spatial grid
-increase with profile level.
+三种运行规模只改变工作量和空间谱网格分辨率：`smoke` 使用3次试验，`preliminary` 使用100次试验，`paper` 使用500次试验。处理周期数 `K` 和下半球空间网格分辨率随运行规模增加。
 
-Validation requires finite values, positive sizes/spacings/timestep/powers,
-length-three attitude vectors, matching interferer direction/INR lengths, and
-source elevations in the visible lower hemisphere `[-90, 0)`.  It supports no
-interferers (`J = 0`) and arbitrary positive `J`.
+配置校验要求：数值必须有限，尺寸、阵元间距、时间步长和功率必须为正；姿态向量长度必须为3；干扰方向数必须与INR数量一致；信号源高度角必须位于可见下半球 `[-90,0)`。系统支持无干扰场景 `J=0`，也支持任意正整数 `J`。
 
-## Reproducibility
+## 可复现性
 
-`uav.util.makeStream(baseSeed, substream)` creates a local Threefry
-`RandStream`; callers pass it explicitly to randomized production functions.
-No production function may use or mutate global `rng` state.
+`uav.util.makeStream(baseSeed, substream)` 创建局部Threefry `RandStream`，调用者必须将其显式传入所有包含随机过程的正式函数。正式函数不得使用或修改MATLAB全局 `rng` 状态。
 
-## Startup and orchestration
+## 启动和统一调度
 
-`startup` adds only `src`, `experiments`, and `tests` under the repository root.
-`run_all(profile)` executes the MATLAB Test suite first, then calls each
-available `experiments/experiment_*.m` function in lexical order with the
-validated configuration.  Its optional `RunTests` and `RunExperiments`
-name-value switches exist only to make orchestration testable; both default to
-true.
+`startup` 只将工程根目录下的 `src`、`experiments` 和 `tests` 加入MATLAB路径。
 
-Generated cache and results are rooted at `cfg.output` and retained outside
-version control using tracked `.gitkeep` placeholders.
+`run_all(profile)` 首先执行MATLAB测试套件，然后按照固定入口顺序调用 `experiments` 中的全部实验函数，并传入经过校验的配置。可选名称—值参数 `RunTests` 和 `RunExperiments` 只用于验证调度逻辑，两者默认均为 `true`。
+
+生成的缓存和实验结果统一保存到 `cfg.output` 指定的目录，并通过已纳入版本控制的 `.gitkeep` 占位文件将生成内容排除在版本控制之外。

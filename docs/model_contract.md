@@ -1,70 +1,31 @@
-# Model contract
+# 模型契约
 
-## Scenario boundary
+## 场景边界
 
-The receiver is a UAV-mounted rectangular UPA in a 5G-cellular downlink
-abstraction. One serving base station transmits the desired signal and `J`
-normal neighbouring cells transmit cochannel interference. Source directions
-are fixed in the world frame. Only UAV attitude changes their apparent
-array-frame directions. This version has no source motion, barrage jammer,
-multipath, fading, OFDM/DM-RS, coding, sensor measurement or learning model.
+接收端采用安装在无人机上的矩形均匀平面阵列（UPA），研究场景抽象为5G蜂窝下行通信。一个服务基站发送期望信号，`J` 个正常邻区基站产生同频干扰。所有信号源在世界坐标系中的方向保持固定，只有无人机姿态变化会改变这些信号在阵列坐标系中的表观方向。当前版本不包含信号源运动、压制式干扰、多径、衰落、OFDM/DM-RS、信道编码、姿态传感器测量或学习模型。
 
-The equivalent complex-baseband model is narrowband, far-field and single-path.
-Desired and interfering symbols are independent unit-power QPSK; noise is
-circular spatially white complex Gaussian. Configured SNR/INR values set source
-powers relative to `cfg.signal.noisePower`.
+等效复基带模型采用窄带、远场和单径假设。期望信号与各干扰信号使用相互独立的单位功率QPSK符号，噪声为圆对称、空间白复高斯噪声。配置中的SNR和INR以 `cfg.signal.noisePower` 为基准确定各信号源功率。
 
-## Frames, angles and rotation
+## 坐标系、角度和旋转
 
-Configuration directions are `[azimuth,elevation]` in degrees. Elevation lies
-in the visible lower hemisphere `[-90,0)` degrees. After validation, all angles
-inside geometry and scenario functions are radians.
+配置文件中的信号方向采用 `[方位角,高度角]` 格式，单位为度。高度角位于阵列可见下半球 `[-90,0)` 度。配置校验完成后，几何和场景函数内部的角度统一使用弧度。
 
-The attitude vector is `[roll,pitch,yaw]`. `rotationZYX` returns the active
-array-to-world rotation `R = Rz(yaw) Ry(pitch) Rx(roll)`. A fixed world unit
-direction is expressed in array coordinates as `u_array = R.' * u_world`. Its
-direction-cosine coordinate is `xi=[u_array(1);u_array(2)]`. Proper-rotation,
-unit-vector and visible-unit-disk invariants are validated.
+姿态向量的顺序为 `[横滚角,俯仰角,偏航角]`。`rotationZYX` 返回从阵列坐标系到世界坐标系的主动旋转矩阵 `R = Rz(yaw) Ry(pitch) Rx(roll)`。世界坐标系中的固定单位方向在阵列坐标系中表示为 `u_array = R.' * u_world`，其方向余弦坐标为 `xi=[u_array(1);u_array(2)]`。代码会检查正旋转矩阵、单位方向矢量和可见单位圆盘等不变量。
 
-## Attitude process and UPA
+## 姿态过程和UPA
 
-The independent attitude offsets follow
-`DeltaEta_k=F_eta DeltaEta_(k-1)+nu_k`, with `F_eta=diag(rho)`,
-`Q_eta=diag(stdRad.^2)` and `Q_nu=Q_eta-F_eta Q_eta F_eta.'`. The initial
-offset is sampled from `N(0,Q_eta)`, so no burn-in is required. Every randomized
-production function receives an explicit Threefry `RandStream`.
+相互独立的姿态角偏差满足 `DeltaEta_k=F_eta DeltaEta_(k-1)+nu_k`，其中 `F_eta=diag(rho)`、`Q_eta=diag(stdRad.^2)`，并且 `Q_nu=Q_eta-F_eta Q_eta F_eta.'`。初始偏差直接从 `N(0,Q_eta)` 中采样，因此不需要额外的预热周期。所有包含随机过程的正式函数都必须显式接收Threefry `RandStream`。
 
-The `Nx` by `Ny` UPA lies in the array `x-y` plane. Steering entries have unit
-magnitude and norm `sqrt(M)`, `M=Nx*Ny`. Sensor order is exactly `vx kron vy`:
-the `y` index changes fastest within each `x` index. Rectangular `Nx~=Ny` is
-supported.
+`Nx×Ny` UPA位于阵列坐标系的 `x-y` 平面。导向矢量各阵元幅度为1，范数为 `sqrt(M)`，其中 `M=Nx*Ny`。传感器顺序严格采用 `vx kron vy`：在每个 `x` 方向索引内，`y` 方向索引变化最快。系统支持 `Nx~=Ny` 的矩形阵列。
 
-## Observation and truth boundary
+## 观测量与真值边界
 
-`generatePeriod` returns `obs.X [M x L]`, SCM `obs.Rx`, known desired pilot,
-period index and nominal reference. Oracle/metric quantities are isolated under
-`obs.truth`: true ASVs, true INCM, powers and directions. Non-Oracle
-reconstruction is tested after removing or poisoning this field and may read
-only observation fields, configuration priors and previous estimated state.
+`generatePeriod` 返回 `obs.X [M×L]`、样本协方差矩阵 `obs.Rx`、已知期望训练序列、处理周期索引以及名义参考导向矢量。Oracle方法和指标计算所需的信息统一隔离在 `obs.truth` 下，包括真实导向矢量、真实INCM、信号功率和方向。测试会在删除或污染该字段后运行非Oracle重构算法，以保证这些算法只能读取阵列观测、配置先验和上一周期估计状态。
 
-When `L<M`, physical noise is not identifiable from the SCM null spectrum in
-the configured strong cochannel scene. INCM reconstruction therefore uses the
-fixed configured receiver-noise prior and records
-`configured-underdetermined`; for `L>=M` it uses a robust lower-eigenvalue
-estimate. The Capon loading/noise pedestal is removed before source-spectrum
-integration, then white noise is added once.
+当 `L<M` 时，在当前同频干扰条件下，无法由SCM的零特征值谱辨识物理噪声功率。因此，INCM重构使用配置中固定的接收机噪声先验，并记录诊断状态 `configured-underdetermined`；当 `L>=M` 时，则采用较小特征值的稳健估计。进行信号源空间谱积分前，需要先去除Capon对角加载和噪声基底，随后只加入一次白噪声项。
 
-## Temporal INCM and robust weight
+## 时序INCM和鲁棒权值
 
-The temporal spectrum solves, without a hidden `1/2`,
-`||p-c||^2+lambdaS||c||_1+lambdaT||c-GcPrev||_1`, `c>=0`. `G` is estimated by
-bounded masked normalized 2-D correlation and becomes identity under weak or
-ambiguous evidence. Peak count never uses true `J` and is capped at `M-1`.
-Fine/coarse quadrature nodes remain in the unit disk and outside the nominal
-desired exclusion.
+时序空间谱求解以下不包含隐式 `1/2` 系数的目标函数：`||p-c||^2+lambdaS||c||_1+lambdaT||c-GcPrev||_1`，并满足 `c>=0`。谱对齐算子 `G` 通过有界、带掩模的二维归一化相关估计；当证据较弱或存在歧义时退化为恒等映射。谱峰数量不能使用真实干扰数 `J`，上限为 `M-1`。粗、细求积节点必须位于可见单位圆盘内，并排除名义期望信号区域。
 
-The common robust weight minimizes `w^H RinHat w+gamma||w||^2` subject to
-`real(w^H aRef)-epsilonS||w||>=1`, as a `2M`-real-variable Optimization Toolbox
-problem. Epsilon is calibrated once from a fixed design-jitter distribution,
-not from current trial truth. With `epsilonS=0`, it uses standard MVDR exactly,
-independent of the configured positive `gamma` value.
+静态与时序INCM方法共用鲁棒权值求解器。其目标为最小化 `w^H RinHat w+gamma||w||^2`，约束为 `real(w^H aRef)-epsilonS||w||>=1`，并转换成 `2M` 维实变量后使用Optimization Toolbox求解。`epsilonS` 只根据固定设计抖动分布离线标定，不得使用当前试次真值。当 `epsilonS=0` 时，无论配置的 `gamma` 是否为正，都必须严格退化为标准MVDR。
