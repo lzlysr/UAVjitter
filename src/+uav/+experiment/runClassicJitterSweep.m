@@ -38,29 +38,47 @@ summaryTable = classicSweepTable(jitterPoints, methodNames, ...
     sinrSummary, gainSummary, leakageSummary);
 
 fig = uav.plot.newFigure(cfg);
-layout = tiledlayout(fig, 2, 1);
+layout = tiledlayout(fig, 'flow');
 nexttile(layout); hold on;
+% 含误差棒的中位数 95%置信区间：反映中位数估计的不确定程度，不是原始SINR样本的分布范围。
+% for methodIndex = 1:methodCount
+%     lower = squeeze(sinrSummary.ci95Db(1, :, methodIndex)).';
+%     upper = squeeze(sinrSummary.ci95Db(2, :, methodIndex)).';
+%     center = sinrSummary.medianDb(:, methodIndex);
+%     errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
+%         'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
+% end
+% 只含中位数
 for methodIndex = 1:methodCount
-    lower = squeeze(sinrSummary.ci95Db(1, :, methodIndex)).';
-    upper = squeeze(sinrSummary.ci95Db(2, :, methodIndex)).';
     center = sinrSummary.medianDb(:, methodIndex);
-    errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
-        'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
+    [lineStyle, marker] = classicMethodStyle(methodNames(methodIndex));
+    curve = plot(jitterPoints, center, ...
+        'LineStyle', lineStyle, ...
+        'Marker', marker, ...
+        'LineWidth', cfg.plot.lineWidth, ...
+        'MarkerSize', cfg.plot.markerSize-4);
+    if methodNames(methodIndex) == "oracle"
+        % Oracle是理想性能上界，使用黑色虚线与其他比较方法区分。
+        set(curve, 'Color', [0, 0, 0], 'LineStyle', '--');
+    end
 end
 xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
-ylabel('输出SINR中位数（dB）', 'FontSize', cfg.plot.fontSize); grid on;
-set(gca, 'FontSize', cfg.plot.fontSize);
+ylabel('输出SINR（dB）', 'FontSize', cfg.plot.fontSize); grid on;
+set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+box on;
+ylim([-30, 30]);
 legend(cellstr(methodLabels), 'Location', 'bestoutside', ...
     'FontSize', cfg.plot.fontSize);
-nexttile(layout);
-plot(jitterPoints, sinrSummary.lowDb, '-o', ...
-    'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
-ylabel('输出SINR第5百分位（dB）', 'FontSize', cfg.plot.fontSize); grid on;
-set(gca, 'FontSize', cfg.plot.fontSize);
-legend(cellstr(methodLabels), 'Location', 'bestoutside', ...
-    'FontSize', cfg.plot.fontSize);
-title(layout, '经典方法在姿态抖动下的输出SINR退化');
+% nexttile(layout);
+% plot(jitterPoints, sinrSummary.lowDb, '-o', ...
+%     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
+% xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
+% ylabel('输出SINR第5百分位（dB）', 'FontSize', cfg.plot.fontSize); grid on;
+% set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+% box on;
+% legend(cellstr(methodLabels), 'Location', 'bestoutside', ...
+%     'FontSize', cfg.plot.fontSize);
+% title(layout, '经典方法在姿态抖动下的输出SINR退化');
 
 result = struct( ...
     'experimentName', "exp06_classic_method_jitter_sweep", ...
@@ -103,12 +121,29 @@ raw.desiredSteeringMismatchNormalized(:, :, pointIndex) = ...
 raw.snapshotSignatures(:, :, pointIndex, :, :) = pointRaw.snapshotSignatures;
 end
 
+function [lineStyle, marker] = classicMethodStyle(name)
+%CLASSICMETHODSTYLE 为每种经典方法返回固定且互不重复的绘图样式。
+catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
+    "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr"];
+lineStyles = ["--", "-", "--", "-.", "-.", "-", "--", "-.", ...
+    ":", "-", "--"];
+markers = ["none", "o", "s", "^", "v", "d", "x", "+", "p", ...
+    "h", "*"];
+[found, location] = ismember(string(name), catalogNames);
+if ~found
+    error('uav:experiment:InvalidClassicMethodSelection', ...
+        'A classic method has no plotting style.');
+end
+lineStyle = lineStyles(location);
+marker = markers(location);
+end
+
 function labels = classicMethodLabels(names)
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
     "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr"];
-catalogLabels = ["Oracle MVDR", "NSB", "冻结初始MVDR", "SCM-MVDR", ...
-    "NLMS", "RLS", "PI", "DL-MVDR", "ESP", "WCO", ...
-    "静态Capon-INCM-MVDR"];
+catalogLabels = ["理想上界", "NSB", "冻结初始MVDR", "MVDR", ...
+    "NLMS", "RLS", "PI", "DL", "ESP", "WCO", ...
+    "INCM"];
 [found, locations] = ismember(names, catalogNames);
 if ~all(found)
     error('uav:experiment:InvalidClassicMethodSelection', ...

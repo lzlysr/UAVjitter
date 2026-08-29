@@ -44,28 +44,30 @@ summaryTable = sweepTable(jitterPoints, methodNames, ...
 fig = uav.plot.newFigure(cfg);
 % 三个面板依次展示中位SINR、SINR低分位和式（3-10）期望导向失配。
 layout = tiledlayout(fig, 'flow');
-nexttile(layout); hold on;
-for methodIndex = 1:methodCount
-    lower = squeeze(sinrSummary.ci95Db(1, :, methodIndex)).';
-    upper = squeeze(sinrSummary.ci95Db(2, :, methodIndex)).';
-    center = sinrSummary.medianDb(:, methodIndex);
-    errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
-        'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-end
-xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
-ylabel('输出SINR中位数（dB）', 'FontSize', cfg.plot.fontSize); grid on;
-set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
-legend(cellstr(methodNames), 'Location', 'best', ...
-    'FontSize', cfg.plot.fontSize);
+% nexttile(layout); hold on;
+% for methodIndex = 1:methodCount
+%     lower = squeeze(sinrSummary.ci95Db(1, :, methodIndex)).';
+%     upper = squeeze(sinrSummary.ci95Db(2, :, methodIndex)).';
+%     center = sinrSummary.medianDb(:, methodIndex);
+%     errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
+%         'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
+% end
+% xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
+% ylabel('输出SINR中位数（dB）', 'FontSize', cfg.plot.fontSize); grid on;
+% set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+% legend(cellstr(methodNames), 'Location', 'best', ...
+%     'FontSize', cfg.plot.fontSize);
+% nexttile(layout);
+% plot(jitterPoints, sinrSummary.lowDb, '-o', ...
+%     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
+% xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
+% ylabel('输出SINR第5百分位（dB）', 'FontSize', cfg.plot.fontSize); grid on;
+% set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
+% legend(cellstr(methodNames), 'Location', 'best', ...
+%     'FontSize', cfg.plot.fontSize);
 nexttile(layout);
-plot(jitterPoints, sinrSummary.lowDb, '-o', ...
-    'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
-ylabel('输出SINR第5百分位（dB）', 'FontSize', cfg.plot.fontSize); grid on;
-set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
-legend(cellstr(methodNames), 'Location', 'best', ...
-    'FontSize', cfg.plot.fontSize);
-nexttile(layout);
+% 每个蒙特卡洛试次内，先对所有周期的导向失配取中位数；
+% 再对不同蒙特卡洛试次统计中位数、第5百分位和第95百分位。
 mismatchMedian = mismatchSummary.median(:, 1);
 mismatchLow = mismatchSummary.low(:, 1);
 mismatchHigh = mismatchSummary.p95(:, 1);
@@ -75,6 +77,7 @@ errorbar(jitterPoints, mismatchMedian, ...
 xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
 ylabel('归一化期望导向失配程度', ...
     'FontSize', cfg.plot.fontSize); grid on;
+legend('中位数（误差棒：5%–95%分位）', 'Location', 'best', 'FontSize', cfg.plot.fontSize);
 ylim([0,1]);
 set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
 % title(layout, '姿态抖动RMS配对扫描');
