@@ -1,12 +1,18 @@
-function [raw, seeds] = collectMethods(cfg, experimentIndex, pointIndex, periodCount)
-%COLLECTMETHODS 生成配对观测并收集六种方法的原始指标。
+function [raw, seeds] = collectMethods( ...
+        cfg, experimentIndex, pointIndex, periodCount, methodNames)
+%COLLECTMETHODS 生成配对观测并收集所选方法的原始指标。
 %   方法性能字段尺寸为[试次×周期×方法]；与方法无关的期望导向失配
 %   尺寸为[试次×周期]；snapshotSignatures额外有长度4的摘要维。
 %   seeds保存实际使用的场景和快拍子流，支持独立重建复核。“配对”表示
-%   同一试次、同一周期的六种方法只生成一次obs。
+%   同一试次、同一周期的全部所选方法只生成一次obs。
 
+if nargin < 5
+    % 保留原四参数接口，其他实验继续使用固定六方法组合。
+    methodNames = cfg.experiments.methodNames;
+end
+methodNames = reshape(string(methodNames), 1, []);
 trialCount = cfg.monteCarlo.nTrials;
-methodCount = numel(cfg.experiments.methodNames);
+methodCount = numel(methodNames);
 % 不可用的INCM指标用NaN表示，Oracle/SCM/DL不伪造估计误差。
 raw = struct( ...
     'sinrLinear', zeros(trialCount, periodCount, methodCount), ...
@@ -41,7 +47,8 @@ for trialIndex = 1:trialCount
         desiredNominal = cfg.derived.nominalSteeringReference;
         raw.desiredSteeringMismatchNormalized(trialIndex, periodIndex) = ...
             norm(desiredActual - desiredNominal, 2) / norm(desiredNominal, 2);
-        [record, runnerState] = uav.experiment.runMethods(obs, runnerState, cfg);
+        [record, runnerState] = uav.experiment.runMethods( ...
+            obs, runnerState, cfg, methodNames);
         raw.sinrLinear(trialIndex, periodIndex, :) = record.sinrLinear;
         raw.desiredGain(trialIndex, periodIndex, :) = record.desiredGain;
         raw.interferenceLeakage(trialIndex, periodIndex, :) = ...
@@ -54,11 +61,17 @@ for trialIndex = 1:trialCount
             record.incmConditionNumber;
         raw.snapshotSignatures(trialIndex, periodIndex, :, :) = ...
             reshape(record.snapshotSignatures, 1, 1, methodCount, 4);
-        if record.sinrLinear(1) + cfg.experiments.oracleTolerance < ...
-                max(record.sinrLinear(2:end))
-            % 相同真实INCM下，Oracle MVDR理论上不应劣于任意非Oracle权值。
-            error('uav:experiment:OracleBoundViolation', ...
-                'Oracle SINR fell below a non-Oracle weight on the same truth.');
+        oracleIndex = find(methodNames == "oracle", 1);
+        if ~isempty(oracleIndex)
+            otherIndices = setdiff(1:methodCount, oracleIndex);
+            if ~isempty(otherIndices) && ...
+                    record.sinrLinear(oracleIndex) + ...
+                    cfg.experiments.oracleTolerance < ...
+                    max(record.sinrLinear(otherIndices))
+                % 相同真实INCM下，Oracle MVDR理论上不应劣于非Oracle权值。
+                error('uav:experiment:OracleBoundViolation', ...
+                    'Oracle SINR fell below a non-Oracle weight on the same truth.');
+            end
         end
     end
 end

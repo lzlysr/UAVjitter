@@ -1,16 +1,18 @@
 function result = runExp02(cfg)
 %RUNEXP02 实验2：配对扫描三轴姿态抖动RMS。
 %   每个扫描点只改变cfg.attitude.stdDeg，其余几何、功率、算法参数和离线
-%   epsilonS保持不变。同一点内六种方法共享全部场景与快拍。
+%   epsilonS保持不变。同一点内全部所选方法共享场景与快拍；方法组合由
+%   cfg.experiments.exp02MethodNames给出，不影响其他实验的固定六方法合同。
 
 experimentTimer = tic;
 [cfg, calibration] = uav.experiment.prepare(cfg);
 experimentIndex = 2;
 jitterPoints = cfg.experiments.jitterSweepDeg;
+methodNames = reshape(cfg.experiments.exp02MethodNames, 1, []);
 pointCount = numel(jitterPoints);
 trialCount = cfg.monteCarlo.nTrials;
 periodCount = cfg.experiments.periodCounts.jitterSweep;
-methodCount = numel(cfg.experiments.methodNames);
+methodCount = numel(methodNames);
 raw = allocateRaw(trialCount, periodCount, pointCount, methodCount);
 seeds = cell(1, pointCount);
 for pointIndex = 1:pointCount
@@ -21,7 +23,7 @@ for pointIndex = 1:pointCount
     % validate会重建派生量，因此显式恢复实验开始时一次标定的epsilonS。
     pointCfg.beamforming.epsilonS = cfg.beamforming.epsilonS;
     [pointRaw, seeds{pointIndex}] = uav.experiment.collectMethods( ...
-        pointCfg, experimentIndex, pointIndex, periodCount);
+        pointCfg, experimentIndex, pointIndex, periodCount, methodNames);
     raw = assignPoint(raw, pointRaw, pointIndex);
 end
 sinrSummary = uav.experiment.summarizePoints( ...
@@ -36,7 +38,7 @@ trialMedianMismatch = median( ...
 mismatchSummary = uav.experiment.summarizeFinitePoints( ...
     trialMedianMismatch, cfg);
 mismatchSummary.aggregationUnit = "trial-median-over-periods";
-summaryTable = sweepTable(jitterPoints, cfg.experiments.methodNames, ...
+summaryTable = sweepTable(jitterPoints, methodNames, ...
     sinrSummary, gainSummary, leakageSummary, mismatchSummary);
 
 fig = uav.plot.newFigure(cfg);
@@ -50,18 +52,18 @@ for methodIndex = 1:methodCount
     errorbar(jitterPoints, center, center - lower, upper - center, '-o', ...
         'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
 end
-xlabel('三轴姿态抖动RMS（度）', 'FontSize', cfg.plot.fontSize);
+xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
 ylabel('输出SINR中位数（dB）', 'FontSize', cfg.plot.fontSize); grid on;
 set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+legend(cellstr(methodNames), 'Location', 'best', ...
     'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 plot(jitterPoints, sinrSummary.lowDb, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('三轴姿态抖动RMS（度）', 'FontSize', cfg.plot.fontSize);
+xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
 ylabel('输出SINR第5百分位（dB）', 'FontSize', cfg.plot.fontSize); grid on;
 set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
-legend(cellstr(cfg.experiments.methodNames), 'Location', 'best', ...
+legend(cellstr(methodNames), 'Location', 'best', ...
     'FontSize', cfg.plot.fontSize);
 nexttile(layout);
 mismatchMedian = mismatchSummary.median(:, 1);
@@ -70,14 +72,15 @@ mismatchHigh = mismatchSummary.p95(:, 1);
 errorbar(jitterPoints, mismatchMedian, ...
     mismatchMedian - mismatchLow, mismatchHigh - mismatchMedian, '-o', ...
     'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize);
-xlabel('三轴姿态抖动RMS（度）', 'FontSize', cfg.plot.fontSize);
-ylabel('期望信号归一化导向矢量失配程度', ...
+xlabel('姿态抖动RMS（°）', 'FontSize', cfg.plot.fontSize);
+ylabel('归一化期望导向失配程度', ...
     'FontSize', cfg.plot.fontSize); grid on;
+ylim([0,1]);
 set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
-title(layout, '姿态抖动RMS配对扫描');
+% title(layout, '姿态抖动RMS配对扫描');
 
 result = struct('experimentName', "exp02_jitter_sweep", ...
-    'calibration', calibration, 'methodNames', cfg.experiments.methodNames, ...
+    'calibration', calibration, 'methodNames', methodNames, ...
     'seedScheme', {seeds}, 'raw', raw, ...
     'summary', struct('sinr', sinrSummary, 'desiredGain', gainSummary, ...
         'interferenceLeakage', leakageSummary, ...

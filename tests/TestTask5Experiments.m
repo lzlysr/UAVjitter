@@ -21,6 +21,8 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
 
             testCase.verifyEqual(cfg.experiments.methodNames, ...
                 ["oracle", "frozen", "scm", "dl", "static", "temporal"]);
+            testCase.verifyEqual(cfg.experiments.exp02MethodNames, ...
+                cfg.experiments.methodNames);
             testCase.verifyEqual(cfg.experiments.ablationNames, ...
                 ["full", "lambda_t_zero", "identity_alignment", ...
                 "uniform_quadrature", "no_structure", "pilot_projection"]);
@@ -35,6 +37,14 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
 
             invalid = cfg;
             invalid.experiments.methodNames(2) = "oracle";
+            testCase.verifyError(@() uav.config.validate(invalid), ...
+                'uav:config:InvalidExperimentParameter');
+            invalid = cfg;
+            invalid.experiments.exp02MethodNames = ["scm", "scm"];
+            testCase.verifyError(@() uav.config.validate(invalid), ...
+                'uav:config:InvalidExperimentParameter');
+            invalid = cfg;
+            invalid.experiments.exp02MethodNames = "unknown";
             testCase.verifyError(@() uav.config.validate(invalid), ...
                 'uav:config:InvalidExperimentParameter');
             invalid = cfg;
@@ -330,6 +340,31 @@ classdef TestTask5Experiments < matlab.unittest.TestCase
                 failingFigure, noOverwriteCfg, struct('trials', 1), tic), ...
                 'uav:experiment:ArtifactExists');
             testCase.verifyFalse(isgraphics(failingFigure));
+        end
+
+        % 实验2应只计算配置选择的方法，并保持用户给出的顺序；不选择
+        % Oracle时也不能执行依赖“Oracle位于第一列”的上界检查。
+        function experimentTwoSupportsSelectedMethodSubset(testCase)
+            cfg = compactConfig(testCase);
+            cfg.experiments.exp02MethodNames = ["dl", "scm"];
+            % 集成测试完成导出后关闭图窗，避免批处理会话等待窗口退出。
+            cfg.plot.closeAfterExport = true;
+            cfg = uav.config.validate(cfg);
+
+            [raw, ~] = uav.experiment.collectMethods(cfg, 2, 1, 1, ...
+                cfg.experiments.exp02MethodNames);
+
+            testCase.verifySize(raw.sinrLinear, [1, 1, 2]);
+            testCase.verifySize(raw.snapshotSignatures, [1, 1, 2, 4]);
+            testCase.verifyTrue(all(isfinite(raw.sinrLinear), 'all'));
+
+            result = uav.experiment.runExp02(cfg);
+            testCase.verifyEqual(result.methodNames, ["dl", "scm"]);
+            testCase.verifySize(result.raw.sinrLinear, [1, 1, 2, 2]);
+            exported = readtable(result.artifacts.csv, ...
+                'TextType', 'string');
+            testCase.verifyEqual(unique(exported.method, 'stable').', ...
+                ["dl", "scm"]);
         end
 
         % 单独运行实验且未要求导出后关闭时，统一收尾模块必须保留图窗。

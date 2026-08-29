@@ -26,6 +26,7 @@
 | `interferenceLeakage` | 标量或数组 | 不含接收机噪声的总干扰输出功率 | 指标 |
 | `desiredSteeringMismatchNormalized` | 标量或数组 | 式（3-10）定义的期望信号归一化导向矢量失配 | 场景评价指标 |
 | `incmNmse` | 标量或数组 | 相对Frobenius误差的平方 | 指标 |
+| `exp02MethodNames` | `1×N_method`字符串 | 实验2实际计算、绘图和导出的方法子集及顺序 | 配置参数 |
 | `classicJitterMethodNames` | `1×N_method`字符串 | 独立经典方法抖动实验实际执行的方法及绘图顺序 | 配置参数 |
 | `nlmsState` | 结构体 | NLMS上一周期权值 | 算法状态 |
 | `rlsState` | 结构体 | RLS上一周期权值和逆相关矩阵 | 算法状态 |

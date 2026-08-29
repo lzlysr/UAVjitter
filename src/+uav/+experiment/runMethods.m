@@ -1,14 +1,20 @@
-function [record, nextState] = runMethods(obs, priorState, cfg)
-%RUNMETHODS 在同一个观测上公平运行固定六种比较方法。
+function [record, nextState] = runMethods(obs, priorState, cfg, methodNames)
+%RUNMETHODS 在同一个观测上公平运行指定的主线比较方法。
 %   priorState只包含冻结权值和时序INCM上一周期状态，二者相互独立。
 %   record返回每种方法的指标、运行时间、权值和诊断；所有方法使用相同
 %   aRef、gamma、epsilonS以及同一快拍X。
 
-methodNames = reshape(cfg.experiments.methodNames, 1, []);
-if ~isequal(methodNames, ...
-        ["oracle", "frozen", "scm", "dl", "static", "temporal"])
-    error('uav:experiment:InvalidMethodContract', ...
-        'The six-method runner requires the fixed configured method order.');
+if nargin < 4
+    % 保留原三参数接口，实验3、4仍按固定六方法合同运行。
+    methodNames = cfg.experiments.methodNames;
+end
+methodNames = reshape(string(methodNames), 1, []);
+allowedMethods = ["oracle", "frozen", "scm", "dl", "static", "temporal"];
+if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
+        numel(unique(methodNames)) ~= numel(methodNames) || ...
+        any(~ismember(methodNames, allowedMethods))
+    error('uav:experiment:InvalidMethodSelection', ...
+        'The requested methods must form a nonempty unique supported subset.');
 end
 if ~isstruct(obs) || ~all(isfield(obs, {'X', 'Rx', 'truth'}))
     error('uav:experiment:InvalidObservation', ...
@@ -111,7 +117,7 @@ for methodIndex = 1:methodCount
 end
 
 signature = uav.util.snapshotSignature(obs.X);
-% 同一摘要复制到六个方法，用于实验层自动检查配对观测。
+% 同一摘要复制到全部所选方法，用于实验层自动检查配对观测。
 record = struct( ...
     'methodNames', methodNames, ...
     'sinrLinear', sinrLinear, ...
