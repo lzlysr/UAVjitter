@@ -162,5 +162,58 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
             cfg.literature.guLeshem2012.upaDiagnosis.fitRegularization = 0;
             testCase.verifyWarningFree(@() uav.config.validate(cfg));
         end
+
+        % 防止欠定快拍仍误用过时配置L，或在重构中泄漏真实方向与真实INCM。
+        function upaCovfitUsesObservedUnderdeterminedSnapshotsWithoutTruth(testCase)
+            cfg = config("smoke");
+            cfg.timeline.L = 64;
+            cfg = uav.config.validate(cfg);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(211, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
+                uav.util.makeStream(211, 2));
+            obs.X = obs.X(:, 1:8);
+            obs.pilot = obs.pilot(1:8);
+            obs.Rx = obs.X * obs.X' / size(obs.X, 2);
+            safe = uav.experiment.algorithmObservation(obs);
+            originalLoading = cfg.spectrum.diagonalLoading;
+
+            [RinHat, diagnostics] = uav.incm.upaCovfit(safe, cfg);
+
+            testCase.verifyFalse(isfield(safe, 'truth'));
+            testCase.verifyTrue(all(isfinite(RinHat), 'all'));
+            testCase.verifyLessThan(norm(RinHat - RinHat', 'fro'), 1e-10);
+            testCase.verifyGreaterThan(min(real(eig(RinHat))), 0);
+            testCase.verifyEqual(diagnostics.noiseSource, ...
+                "configured-underdetermined");
+            testCase.verifyEqual(diagnostics.effectiveSnapshotCount, 8);
+            testCase.verifyEqual(diagnostics.noisePower, cfg.signal.noisePower);
+            testCase.verifyEqual(cfg.spectrum.diagonalLoading, originalLoading);
+            testCase.verifyFalse(diagnostics.usedTruth);
+        end
+
+        % 防止名义期望与期望区谱峰重复进入字典，或干扰候选超过阵列秩上限。
+        function upaCovfitDeduplicatesCandidatesAndRecordsAuditableFit(testCase)
+            cfg = config("smoke");
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(223, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
+                uav.util.makeStream(223, 2));
+            safe = uav.experiment.algorithmObservation(obs);
+
+            [RinHat, diagnostics] = uav.incm.upaCovfit(safe, cfg);
+
+            candidateNodes = [diagnostics.desiredCandidateNodes; ...
+                diagnostics.interfererCandidateNodes];
+            tolerance = cfg.spectrum.quadratureDedupTolerance;
+            testCase.verifyEqual(size(unique(round(candidateNodes / tolerance), ...
+                'rows'), 1), size(candidateNodes, 1));
+            testCase.verifyLessThanOrEqual(size(diagnostics.interfererCandidateNodes, 1), ...
+                min(cfg.literature.guLeshem2012.upaDiagnosis.maximumCandidateCount, ...
+                cfg.derived.M - 1));
+            testCase.verifySize(diagnostics.fittedPowers, ...
+                [size(candidateNodes, 1), 1]);
+            testCase.verifyTrue(isfinite(diagnostics.fitResidual));
+            testCase.verifyTrue(isfinite(diagnostics.conditionNumber));
+            testCase.verifyTrue(all(isfinite(RinHat), 'all'));
+        end
     end
 end
