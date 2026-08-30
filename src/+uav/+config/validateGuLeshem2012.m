@@ -16,7 +16,8 @@ required = {'sensorCount', 'spacingOverLambda', 'nominalDesiredDeg', ...
     'monteCarloTrials', 'angleGridStepDeg', 'methodNames', ...
     'wcoSquaredRadiusScale', 'espSignalSubspaceDimension', ...
     'upaTransferSnapshotCount', 'upaTransferJitterDeg', ...
-    'upaTransferGridSizes', 'upaTransferPeriods', 'experimentIndex'};
+    'upaTransferGridSizes', 'upaTransferPeriods', 'upaDiagnosis', ...
+    'experimentIndex'};
 if ~isstruct(paper) || ~all(isfield(paper, required))
     experimentError('literature.guLeshem2012 is incomplete.');
 end
@@ -125,6 +126,68 @@ if paper.upaTransferPeriods > cfg.timeline.K
 end
 validatePositiveIntegerCandidates(paper.experimentIndex, ...
     'guLeshem2012.experimentIndex');
+validateUpaDiagnosis(paper.upaDiagnosis, cfg);
+end
+
+function validateUpaDiagnosis(diagnosis, cfg)
+%VALIDATEUPADIAGNOSIS 校验双快拍UPA积分诊断的固定参数合同。
+required = {'snapshotCounts', 'gridSizes', 'measureNames', ...
+    'selectedGridSize', 'selectedMeasureName', 'loadingRatio', ...
+    'fitRegularization', 'peakThresholdRatio', 'peakNmsRadiusBins', ...
+    'maximumCandidateCount', 'jitterSweepDeg', 'monteCarloTrials', ...
+    'periods', 'experimentIndex'};
+if ~isstruct(diagnosis) || ~all(isfield(diagnosis, required))
+    experimentError('guLeshem2012.upaDiagnosis is incomplete.');
+end
+
+validatePositiveIntegerCandidates(diagnosis.snapshotCounts, ...
+    'guLeshem2012.upaDiagnosis.snapshotCounts');
+validatePositiveIntegerCandidates(diagnosis.gridSizes, ...
+    'guLeshem2012.upaDiagnosis.gridSizes');
+if any(diagnosis.gridSizes < 3) || any(mod(diagnosis.gridSizes, 2) == 0)
+    experimentError('UPA diagnosis grid sizes must be odd integers at least three.');
+end
+validatePositiveIntegerCandidates(diagnosis.selectedGridSize, ...
+    'guLeshem2012.upaDiagnosis.selectedGridSize');
+if ~ismember(diagnosis.selectedGridSize, diagnosis.gridSizes)
+    experimentError('UPA diagnosis selected grid size must be a configured grid size.');
+end
+
+allowedMeasures = ["direction_cosine", "solid_angle", "az_el_solid_angle"];
+measures = reshape(string(diagnosis.measureNames), 1, []);
+if ~isstring(diagnosis.measureNames) || isempty(measures) || ...
+        numel(unique(measures)) ~= numel(measures) || ...
+        any(~ismember(measures, allowedMeasures)) || ...
+        numel(measures) ~= numel(allowedMeasures)
+    experimentError('UPA diagnosis measure names must be the three unique supported measures.');
+end
+if ~isstring(diagnosis.selectedMeasureName) || ...
+        ~isscalar(diagnosis.selectedMeasureName) || ...
+        ~ismember(diagnosis.selectedMeasureName, measures)
+    experimentError('UPA diagnosis selected measure must be a configured measure name.');
+end
+
+validateNonnegativeCandidates(diagnosis.loadingRatio, ...
+    'guLeshem2012.upaDiagnosis.loadingRatio', inf);
+validatePositiveScalar(diagnosis.fitRegularization, ...
+    'guLeshem2012.upaDiagnosis.fitRegularization');
+validateNonnegativeCandidates(diagnosis.peakThresholdRatio, ...
+    'guLeshem2012.upaDiagnosis.peakThresholdRatio', 1 + eps);
+validateNonnegativeIntegerScalar(diagnosis.peakNmsRadiusBins, ...
+    'guLeshem2012.upaDiagnosis.peakNmsRadiusBins');
+validatePositiveIntegerCandidates(diagnosis.maximumCandidateCount, ...
+    'guLeshem2012.upaDiagnosis.maximumCandidateCount');
+validateNonnegativeCandidates(diagnosis.jitterSweepDeg, ...
+    'guLeshem2012.upaDiagnosis.jitterSweepDeg', inf);
+validatePositiveIntegerCandidates(diagnosis.monteCarloTrials, ...
+    'guLeshem2012.upaDiagnosis.monteCarloTrials');
+validatePositiveIntegerCandidates(diagnosis.periods, ...
+    'guLeshem2012.upaDiagnosis.periods');
+if diagnosis.periods > cfg.timeline.K
+    experimentError('UPA diagnosis periods cannot exceed timeline.K.');
+end
+validatePositiveIntegerCandidates(diagnosis.experimentIndex, ...
+    'guLeshem2012.upaDiagnosis.experimentIndex');
 end
 
 function validatePositiveIntegerCandidates(values, name)
@@ -143,6 +206,21 @@ if ~isnumeric(values) || ~isvector(values) || isempty(values) || ...
         any(values >= exclusiveUpperBound) || ...
         numel(unique(values)) ~= numel(values)
     experimentError('%s contains invalid candidates.', name);
+end
+end
+
+function validatePositiveScalar(value, name)
+%VALIDATEPOSITIVESCALAR 校验有限正标量。
+if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value <= 0
+    experimentError('%s must be a positive finite scalar.', name);
+end
+end
+
+function validateNonnegativeIntegerScalar(value, name)
+%VALIDATENONNEGATIVEINTEGERSCALAR 校验有限非负整数标量。
+if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+        value < 0 || value ~= floor(value)
+    experimentError('%s must be a nonnegative integer scalar.', name);
 end
 end
 

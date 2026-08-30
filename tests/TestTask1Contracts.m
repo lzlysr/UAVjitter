@@ -99,6 +99,12 @@ classdef TestTask1Contracts < matlab.unittest.TestCase
                 preliminary.literature.guLeshem2012.(field) = [];
                 paper.literature.guLeshem2012.(field) = [];
             end
+            smoke.literature.guLeshem2012.upaDiagnosis.monteCarloTrials = [];
+            preliminary.literature.guLeshem2012.upaDiagnosis.monteCarloTrials = [];
+            paper.literature.guLeshem2012.upaDiagnosis.monteCarloTrials = [];
+            smoke.literature.guLeshem2012.upaDiagnosis.periods = [];
+            preliminary.literature.guLeshem2012.upaDiagnosis.periods = [];
+            paper.literature.guLeshem2012.upaDiagnosis.periods = [];
             workloadExperimentFields = {'modelValidation', 'jitterSweep', ...
                 'snapshotSweep', 'dynamicStability', 'ablation'};
             for index = 1:numel(workloadExperimentFields)
