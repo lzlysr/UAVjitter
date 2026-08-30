@@ -113,10 +113,10 @@ uav.experiment.runMethods / runVariants
 D:\workspace\UAVjitter\
 ├─ config.m                 唯一正式参数入口
 ├─ startup.m                将 src、experiments 和 tests 加入路径
-├─ run_all.m                运行测试和五组实验
-├─ experiments\             用户直接调用的五个实验入口
+├─ run_all.m                运行测试和五组主实验
+├─ experiments\             五组主实验及三个独立研究实验入口
 ├─ src\+uav\               按 MATLAB 包组织的模型与算法源码
-├─ tests\                   五个阶段的自动化测试
+├─ tests\                   七个阶段的自动化测试
 ├─ docs\                    模型契约、变量字典和实验协议
 ├─ data\cache\              可重新生成的缓存
 └─ results\                 MAT、CSV、FIG、PDF、PNG 和 JSON 结果
@@ -150,9 +150,9 @@ D:\workspace\UAVjitter\
 
 统一运行入口。它先执行全部测试，再按固定顺序调用五个实验，并返回各实验的结果文件路径。
 
-## 7. `experiments`：五个实验入口
+## 7. `experiments`：主实验与独立研究实验入口
 
-该目录中的文件都是很薄的用户入口。它们不包含数值参数，只负责接收配置或 profile，然后调用 `uav.experiment.runExpXX` 中的正式实现。
+该目录中的文件都是很薄的用户入口。它们不包含数值参数，只负责接收配置或 profile，然后调用 `uav.experiment` 包中的正式实现。实验1至实验5由 `run_all` 批量执行；实验6至实验8是针对特定研究问题的独立实验，必须由用户显式调用。
 
 ### `exp01_model_validation.m`
 
@@ -193,11 +193,24 @@ result = exp02_jitter_sweep(cfg);
 
 时序方法消融实验。在完全相同的场景与快拍上依次关闭时间连续性、谱对齐、自适应求积和结构增强，并可开启训练序列投影。程序会验证每个变体只改变一个指定开关。
 
+### `exp06_classic_method_jitter_sweep.m`
+
+经典方法姿态抖动退化实验。方法组合由 `cfg.experiments.classicJitterMethodNames` 控制，用于研究经典波束形成器的输出SINR随三轴抖动RMS变化的趋势，不加入 `run_all`。
+
+### `exp07_gu_leshem2012_reproduction.m`
+
+Gu与Leshem（2012）论文例1的一维ULA忠实复现。实验分别扫描输入SNR和快拍数，固定论文给出的10阵元半波长ULA、期望方向5°、两个干扰方向−50°/−20°、每个干扰30 dB以及期望扇区[0°,10°]。该入口只比较本工程已有且原论文确实比较过的方法：理想先验MVDR、ESP、WCO以及 `gu_leshem2012_rec`。
+
+### `exp08_gu_leshem2012_upa_transfer.m`
+
+Gu–Leshem Rec从一维ULA直接迁移到当前矩形UPA的诊断实验。它只把一维角度积分改成二维方向余弦面积求积，不加入对角加载、噪声底座、结构投影、动态扇区、谱对齐或时序稀疏增强。实验同时输出SINR、INCM误差、主特征值比例、归一化特征值谱误差、条件数、干扰子空间距离和扇区违约率，用于分辨“原公式本身是否可复现”和“直接搬到UPA后为何退化”这两个问题。
+
 ## 8. `src/+uav`：模型与算法模块
 
 ### 8.1 `+config`：配置校验与派生量
 
 - `validate.m`：检查配置字段、参数范围和维度；把角度转换到模型使用的弧度语义；计算阵列规模 `M`、干扰数 `J`、信号功率、世界方向、名义阵列流形以及二维Capon网格流形缓存；同时规范化输出目录。
+- `validateGuLeshem2012.m`：独立校验文献复现与UPA迁移参数，限制方法集合为论文和当前实现的交集，并阻止未经说明的奇异样本协方差回退、偶数二维网格或缺失Rec方法。
 
 ### 8.2 `+geometry`：坐标系与姿态旋转
 
@@ -208,11 +221,13 @@ result = exp02_jitter_sweep(cfg);
 ### 8.3 `+array`：矩形UPA阵列流形
 
 - `steeringUPA.m`：根据二维方向余弦、阵列行列数和波长归一化间距生成导向矢量；阵元顺序固定为 `vx⊗vy`，支持 `Nx≠Ny` 以及一次输入多个方向。
+- `steeringULA.m`：按照论文的一维ULA角度定义生成导向矢量，采用 `exp(j2πdm sinθ)`；该函数只服务于文献忠实复现，避免把当前UPA的二维方向余弦约定误套到原论文上。
 
 ### 8.4 `+scenario`：动态场景与快拍生成
 
 - `generate.m`：按照三轴独立一阶高斯—马尔可夫模型生成整段姿态轨迹，然后逐周期计算旋转矩阵、阵列坐标方向、方向余弦和真实导向矢量；不预生成大型快拍数组。
 - `generatePeriod.m`：只生成指定周期的期望QPSK训练序列、独立干扰QPSK序列和复高斯白噪声，形成 `X`、`Rx`；真实INCM和真实阵列流形集中放入 `truth` 字段。
+- `generateGuLeshem2012Trial.m`：生成论文例1的一次块快拍。期望、干扰和噪声均为独立复高斯过程；每次蒙特卡洛试验抽取固定的±4°实际DOA偏差，并构造期望扇区补集上的梯形求积节点和权重。
 
 ### 8.5 `+spectrum`：二维空间谱处理
 
@@ -222,12 +237,14 @@ result = exp02_jitter_sweep(cfg);
 - `selectPeaks.m`：在增强谱上执行阈值筛选和非极大值抑制；峰数只受观测阈值和 `M-1` 上限限制，不使用真实干扰数。
 - `adaptiveQuadrature.m`：峰值邻域采用细网格，其他干扰区域采用粗网格，并为方向余弦单元分配面积权重。
 - `mergeQuadratureNodes.m`：合并细网格与粗网格中的重复或近重复节点，累计相应求积权重，避免同一区域重复积分。
+- `guLeshem2012UpaQuadrature.m`：为UPA迁移实验生成期望排除区外的二维方向余弦节点及面积权重。它是“最直接二维化”的诊断模块，不声称等价于论文的一维角度积分。
 
 ### 8.6 `+incm`：INCM重构
 
 - `reconstruct.m`：静态和时序INCM的统一入口。静态方法使用当前周期Capon谱和均匀求积；时序方法依次进行谱对齐、非负时序稀疏增强、峰值选择、自适应求积和结构投影。该文件还负责噪声功率估计、期望区排除和可选训练序列投影。
 - `temporalProx.m`：求解非负逐元素时序稀疏目标。利用目标函数的分段凸结构枚举精确候选点，不依赖CVX。
 - `projectStructure.m`：对原始INCM依次执行Hermitian化、半正定投影、特征值下限和可配置收缩，保证输出有限、Hermitian且半正定。
+- `guLeshem2012Rec.m`：严格按论文式(6)计算Capon功率，再按式(7)对期望扇区补集积分。该函数不添加对角加载、伪逆、显式噪声单位阵、谱底座扣除、PSD修复或收缩；样本协方差不可逆时明确报错，而不是静默改变算法。
 
 ### 8.7 `+beamforming`：波束形成权值
 
@@ -260,6 +277,11 @@ result = exp02_jitter_sweep(cfg);
 此外，`runClassicJitterSweep.m` 与 `experiments/exp06_classic_method_jitter_sweep.m`
 构成独立的经典方法退化实验。该实验不加入 `run_all`，只在用户明确调用
 时执行，并根据 `cfg.experiments.classicJitterMethodNames` 选择方法组合。
+
+文献研究分为三个实现层：`runGuLeshem2012Methods.m`在同一观测上执行
+Oracle、ESP、WCO和Rec；`runGuLeshem2012Reproduction.m`组织原论文的一维
+SNR/快拍扫描；`runGuLeshem2012UpaTransfer.m`组织当前UPA场景的二维直接
+迁移和扇区、网格诊断。后两者均为独立实验，不改变五组主实验入口。
 
 #### 配置、随机性和统计汇总
 
@@ -318,6 +340,13 @@ result = exp02_jitter_sweep(cfg);
 验证经典方法选择配置、NSB线性约束、NLMS/RLS训练参考递推、PI参考阵元
 约束、ESP子空间投影、WCO最坏情形响应约束、任意方法子集配对运行以及
 独立经典方法抖动扫描的结果文件。
+
+### `TestTask7GuLeshem2012Rec.m`
+
+验证Rec式(6)–(7)与手工矩阵计算一致、论文例1参数和角域积分总测度正确、
+比较方法只来自论文与现有实现的交集、论文复现同时输出SNR和快拍扫描、UPA
+迁移输出网格与扇区诊断，以及非法方法、可能导致原始Rec奇异的快拍数和
+不合规二维网格会被配置层拒绝。
 
 ## 10. 已实现的比较方法
 
@@ -392,6 +421,22 @@ WCO候选若使离线标定半径达到或超过参考导向矢量范数，将�
 对应profile目录。当前实测结论和解释边界见
 [经典方法参数研究结果](docs/classic_parameter_study_results.md)。
 
+## 10.3 Gu–Leshem 2012 Rec复现与UPA迁移
+
+文献参数集中在 `cfg.literature.guLeshem2012`。`methodNames`必须包含
+`gu_leshem2012_rec`，并可在 `oracle`、`esp`、`wco` 中选择对照方法；不得
+加入原论文未比较或工程尚未实现的方法。运行方式为：
+
+```matlab
+startup;
+cfg = config("smoke");
+paperResult = exp07_gu_leshem2012_reproduction(cfg);
+upaResult = exp08_gu_leshem2012_upa_transfer(cfg);
+```
+
+原论文复现与当前UPA迁移的公式边界、参数含义和结果解释规则见
+[Gu–Leshem 2012 Rec复现说明](docs/gu_leshem2012_rec_reproduction.md)。
+
 ## 11. 结果文件
 
 每个实验成功后生成：
@@ -419,3 +464,4 @@ WCO候选若使离线标定半径达到或超过参考导向矢量范数，将�
 - [模型契约](docs/model_contract.md)
 - [变量字典](docs/variable_dictionary.md)
 - [实验协议](docs/experiment_protocol.md)
+- [Gu–Leshem 2012 Rec复现说明](docs/gu_leshem2012_rec_reproduction.md)
