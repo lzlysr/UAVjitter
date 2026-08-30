@@ -215,5 +215,45 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
             testCase.verifyTrue(isfinite(diagnostics.conditionNumber));
             testCase.verifyTrue(all(isfinite(RinHat), 'all'));
         end
+
+        % 防止M=1时无峰回退绕过min(maximumCandidateCount,M-1)的硬上限。
+        function upaCovfitKeepsNoInterfererCandidatesWhenArrayHasOneSensor(testCase)
+            cfg = config("smoke");
+            cfg.array.Nx = 1;
+            cfg.array.Ny = 1;
+            cfg = uav.config.validate(cfg);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(227, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
+                uav.util.makeStream(227, 2));
+            safe = uav.experiment.algorithmObservation(obs);
+
+            [RinHat, diagnostics] = uav.incm.upaCovfit(safe, cfg);
+
+            testCase.verifyGreaterThanOrEqual(cfg.derived.J, cfg.derived.M);
+            testCase.verifyEqual(diagnostics.interfererCandidateCap, 0);
+            testCase.verifyEqual(diagnostics.interfererCandidateCount, 0);
+            testCase.verifyEqual(RinHat, diagnostics.noisePower * eye(1), ...
+                'AbsTol', 1e-12);
+            testCase.verifyTrue(all(isfinite(RinHat), 'all'));
+            testCase.verifyGreaterThan(min(real(eig(RinHat))), 0);
+        end
+
+        % 防止名义期望与精确谱网格峰重合时仍形成重复的期望拟合字典列。
+        function upaCovfitDeduplicatesNominalNodeAndDesiredGridPeak(testCase)
+            cfg = config("smoke");
+            cfg.sources.desiredAzElDeg = [0, -90];
+            cfg = uav.config.validate(cfg);
+            nominal = cfg.derived.nominalSteeringReference;
+            snapshotCount = cfg.timeline.L;
+            X = sqrt(30) * nominal * ones(1, snapshotCount) + ...
+                sqrt(cfg.signal.noisePower) * eye(cfg.derived.M, snapshotCount);
+            safe = struct('X', X, 'Rx', X * X' / snapshotCount);
+
+            [~, diagnostics] = uav.incm.upaCovfit(safe, cfg);
+
+            testCase.verifyEqual(size(diagnostics.desiredCandidateNodes, 1), 1);
+            testCase.verifyEqual(diagnostics.desiredCandidateFallback, ...
+                "deduplicated-with-nominal");
+        end
     end
 end
