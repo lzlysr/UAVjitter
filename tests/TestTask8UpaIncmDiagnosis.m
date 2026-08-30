@@ -12,6 +12,62 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
     end
 
     methods (Test)
+        % 防止协方差拟合把两个候选源的独立功率混合或读取任何真值。
+        function nonnegativeFitRecoversSyntheticSourcePowers(testCase)
+            cfg = config("smoke");
+            xi = [0.2, -0.4; -0.3, 0.1];
+            A = uav.array.steeringUPA(xi, cfg.array.Nx, cfg.array.Ny, ...
+                cfg.array.spacingOverLambda);
+            expected = [20; 7];
+            noise = 1;
+            Rx = A * diag(expected) * A' + noise * eye(cfg.derived.M);
+
+            [actual, diagnostics] = uav.incm.fitNonnegativePowers( ...
+                Rx, A, noise, 0);
+
+            testCase.verifyEqual(actual, expected, 'RelTol', 1e-9);
+            testCase.verifyLessThan(diagnostics.relativeResidual, 1e-10);
+            testCase.verifyEqual(diagnostics.dictionaryRank, 2);
+            testCase.verifyFalse(diagnostics.usedTruth);
+        end
+
+        % 防止严格下三角未按sqrt(2)缩放，从而改变Frobenius正则化权衡。
+        function nonnegativeFitPreservesFrobeniusWeightForOneCandidate(testCase)
+            cfg = config("smoke");
+            A = uav.array.steeringUPA([0.2; -0.3], cfg.array.Nx, ...
+                cfg.array.Ny, cfg.array.spacingOverLambda);
+            expectedSourcePower = 20;
+            lambdaFit = 9;
+            Rx = expectedSourcePower * (A * A') + eye(cfg.derived.M);
+            expected = 18;
+
+            actual = uav.incm.fitNonnegativePowers(Rx, A, 1, lambdaFit);
+
+            testCase.verifyEqual(actual, expected, 'AbsTol', 1e-10);
+        end
+
+        % 防止非法协方差、空候选或非法标量悄然进入NNLS求解器。
+        function nonnegativeFitRejectsInvalidInputs(testCase)
+            validCovariance = eye(2);
+            validManifold = [1; 1];
+
+            testCase.verifyError(@() uav.incm.fitNonnegativePowers( ...
+                ones(2, 3), validManifold, 0, 0), ...
+                'uav:incm:InvalidCovariance');
+            testCase.verifyError(@() uav.incm.fitNonnegativePowers( ...
+                validCovariance, zeros(2, 0), 0, 0), ...
+                'uav:incm:InvalidCandidateManifold');
+            testCase.verifyError(@() uav.incm.fitNonnegativePowers( ...
+                validCovariance, validManifold, -1, 0), ...
+                'uav:incm:InvalidNoisePower');
+            testCase.verifyError(@() uav.incm.fitNonnegativePowers( ...
+                validCovariance, validManifold, 0, -1), ...
+                'uav:incm:InvalidFitRegularization');
+            testCase.verifyError(@() uav.incm.fitNonnegativePowers( ...
+                [1, NaN; 0, 1], validManifold, 0, 0), ...
+                'uav:incm:InvalidCovariance');
+        end
+
         % 防止诊断配置遗漏低快拍条件或任一指定求积测度。
         function configurationContainsBothSnapshotCounts(testCase)
             cfg = config("smoke");
