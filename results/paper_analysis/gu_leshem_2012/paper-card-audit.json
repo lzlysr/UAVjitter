@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
   "summary": {
-    "status": "fail",
-    "passes": 7,
-    "warnings": 3,
-    "errors": 2
+    "status": "pass_with_warnings",
+    "passes": 11,
+    "warnings": 1,
+    "errors": 0
   },
   "metrics": {
     "locator_mode": "structure-grounded",
@@ -26,7 +26,7 @@
       "15",
       "16"
     ],
-    "paper_pointer_count": 0,
+    "paper_pointer_count": 21,
     "figures_in_bundle": 0,
     "tables_in_bundle": 0,
     "equations_in_bundle": 0
@@ -43,12 +43,9 @@
       "message": "No Sections 17 or 18 found."
     },
     {
-      "level": "error",
+      "level": "pass",
       "code": "status_header",
-      "message": "The evidence-status header must contain at least seven blockquote fields.",
-      "details": {
-        "found": 0
-      }
+      "message": "The evidence-status header has at least seven fields."
     },
     {
       "level": "pass",
@@ -56,9 +53,9 @@
       "message": "The card declares locator mode: structure-grounded."
     },
     {
-      "level": "error",
+      "level": "pass",
       "code": "paper_pointers",
-      "message": "No [Paper: ...] pointers found."
+      "message": "Found 21 paper source pointers."
     },
     {
       "level": "pass",
@@ -81,14 +78,14 @@
       "message": "Section 16 includes the required status field."
     },
     {
-      "level": "warning",
+      "level": "pass",
       "code": "idea_validation",
-      "message": "Section 16 may be missing the validation field."
+      "message": "Section 16 includes the required validation field."
     },
     {
-      "level": "warning",
+      "level": "pass",
       "code": "idea_failure",
-      "message": "Section 16 may be missing the failure field."
+      "message": "Section 16 includes the required failure field."
     },
     {
       "level": "pass",

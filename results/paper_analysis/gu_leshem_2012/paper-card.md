@@ -1,6 +1,14 @@
 # Gu 与 Leshem（2012）INCM 重构与导向矢量估计论文卡片
 
-定位模式：structure-grounded。原始 PDF 共 5 页；由于标准准备脚本所需的 PyMuPDF 在当前运行环境中缺失，本卡片采用论文节、公式、表和图作为来源定位。
+> Source coverage: Full paper
+> Extraction confidence: High
+> Locator mode: structure-grounded
+> Primary analytical lens: INCM reconstruction and steering-vector estimation
+> Secondary analytical lens: UAV attitude-jitter transferability
+> Context verification: Paper-only
+> Card completeness: Complete relative to supplied source
+
+原始 PDF 共 5 页；由于标准准备脚本所需的 PyMuPDF 在当前运行环境中缺失，本卡片采用论文节、公式、表和图作为来源定位。
 
 ## 01 基本信息
 
@@ -16,9 +24,13 @@
 - 阅读日期：2026-08-29
 - 与本课题关系：是“Capon 空间谱积分重构 INCM，再校正期望导向矢量”路线的基础文献，但原文对象是窄带 ULA，不能不加验证地直接等同于 UAV 姿态抖动下的二维 UPA 实现。
 
+[Paper: Metadata] [Paper: Section IV]
+
 ## 02 一句话总结
 
 该文针对训练快拍含期望信号且存在导向矢量失配时的自消问题，先在期望信号角扇区之外积分 Capon 谱重构干扰加噪声协方差，再通过 QCQP 校正期望导向矢量，并在其 ULA 仿真条件下获得接近理想 SINR 的结果。
+
+[Paper: Abstract] [Paper: Table I]
 
 ## 03 研究问题
 
@@ -27,9 +39,13 @@
 - 既有方法不足：加载量难选；只校正导向矢量而不利用干扰功率会损失动态范围。
 - 问题表述：能否通过构造近似无期望信号的 INCM，并约束导向矢量校正不靠近干扰子空间，从而同时减轻协方差误差和导向失配？
 
+[Paper: Section I] [Paper: Section III]
+
 ## 04 研究背景与发展路径
 
 论文给出的发展路径为：SMI/MPDR → 对角加载和最坏情况方法 → 导向矢量估计 → INCM 重构 → INCM 重构与导向矢量联合使用。该路径是论文作者的文献组织，不等同于本卡片完成的独立系统综述。论文声称其贡献位于最后一步：既利用角外 Capon 谱中的干扰功率，又校正期望导向矢量。
+
+[Paper: Section I]
 
 ## 05 论文识别的核心痛点
 
@@ -46,6 +62,8 @@
 2. 核心洞见：先从协方差中隔离期望信号影响，再用重构 INCM 同时充当权值计算矩阵和导向校正的干扰约束矩阵。
 3. [Analysis] 可迁移经验：INCM 重构与导向矢量校正是两个独立误差源，若只实现前者，就不能把结果称为论文完整算法。
 
+[Paper: Table I]
+
 ## 07 方法总览
 
 - 输入：含期望信号的阵列快拍、阵列流形、期望信号可能角扇区及名义导向矢量。
@@ -53,6 +71,8 @@
 - 假设：期望信号实际方向位于扇区内，干扰位于扇区外；扫描流形能描述候选方向；SCM 可用于 Capon 谱估计。
 - 工具：论文仿真使用 CVX 求解 QCQP。
 - 流程：SCM → Capon 谱 → 角外积分重构 INCM → QCQP 求正交失配分量 → 校正导向矢量 → MVDR 形式权值。
+
+[Paper: Table I]
 
 ## 08 核心模块拆解
 
@@ -72,11 +92,15 @@
    \]
    其中 \(\widehat{\mathbf R}\) 为含期望信号的 SCM，\(\mathbf d(\theta)\) 为候选方向流形。用途是估计方向功率；来源为式(6)。
 
+   [Paper: Equation 6]
+
 2. INCM 重构：
    \[
    \widetilde{\mathbf R}_{i+n}=\int_{\bar\Theta}\widehat P(\theta)\mathbf d(\theta)\mathbf d^H(\theta)\,d\theta.
    \]
    \(\Theta\) 是包含期望信号且不包含干扰的角扇区，\(\bar\Theta\) 为其补集。来源为式(7)。
+
+   [Paper: Equation 7]
 
 3. 导向矢量校正：
    \[
@@ -85,12 +109,16 @@
    \]
    约束 \(\bar{\mathbf a}^H\mathbf e_\perp=0\)，且校正矢量在重构 INCM 下的二次型不超过名义矢量。得到 \(\widetilde{\mathbf a}=\bar{\mathbf a}+\mathbf e_\perp\)。来源为式(11)–(12)。
 
+   [Paper: Equation 11] [Paper: Equation 12]
+
 4. 最终权值：
    \[
    \mathbf w_{\rm Rec-Est}=\frac{\widetilde{\mathbf R}_{i+n}^{-1}\widetilde{\mathbf a}}
    {\widetilde{\mathbf a}^H\widetilde{\mathbf R}_{i+n}^{-1}\widetilde{\mathbf a}}.
    \]
    来源为式(13)。
+
+   [Paper: Equation 13]
 
 ## 10 实验设计与证据链
 
@@ -99,6 +127,8 @@
 - 期望信号：名义 DOA 5°；角扇区为 [0°,10°]。
 - 采样：SNR 扫描时 30 快拍；快拍扫描时 SNR=20 dB；每点 200 次蒙特卡洛。
 - 对比：特征空间法、最坏情况法、SQP 法、收缩估计法、IAA、理想最优方法，以及论文的 Rec 与 Rec-Est。
+
+[Paper: Section IV] [Paper: Figure 1] [Paper: Figure 2]
 
 | 实验 | 检验主张 | 条件 | 结果 | 支持的结论 | 不支持的更强结论 | 来源 |
 |---|---|---|---|---|---|---|
@@ -109,11 +139,15 @@
 
 论文证明的是在其仿真设置中，角外 Capon 重构与 QCQP 导向校正的组合具有较好 SINR；其中理想最优曲线使用真实 INCM 与真实导向矢量。方法不是端到端 5G 链路，不包含 UAV 姿态过程，也没有验证二维 UPA 上二维谱积分的测度选择。其关键前提是期望扇区和干扰扇区可分。计算复杂度由 QCQP 主导，作者给出约 \(O(M^{3.5})\)。有界表述应为：该文在 10 阵元 ULA、两个 30 dB INR 干扰及指定失配模型下，展示了 Rec-Est 接近理想 SINR 的仿真证据。
 
+[Paper: Section III] [Paper: Section IV]
+
 ## 12 作者明确承认的局限
 
 No explicit author-acknowledged limitation was found in the supplied source.
 
 相关约束（作者未以正式“局限”表述）：期望信号必须位于 \(\Theta\) 内且干扰不在其中；完整方法需要求解 QCQP；角扇区宽度依赖阵列分辨率和传播环境。
+
+[Paper: Section III-A] [Paper: Section III-B]
 
 ## 13 批判性分析
 
@@ -149,6 +183,8 @@ No explicit author-acknowledged limitation was found in the supplied source.
    - 增量：先不加入 UAV、UPA、加载和结构投影。
    - 验证：复现图1的 SNR/快拍趋势，并报告公式级中间量。
    - 失败模式：角度约定、积分离散化或随机失配模型不一致。
+   - Validation: 复现图1的 SNR/快拍趋势，并报告公式级中间量。
+   - Possible failure: 角度约定、积分离散化或随机失配模型不一致。
    - 创新状态：unverified（属于复现，不是创新）。
 
 2. 名称：姿态感知的动态期望扇区
@@ -157,6 +193,8 @@ No explicit author-acknowledged limitation was found in the supplied source.
    - 增量：把固定 \(\Theta\) 改为有置信边界的时变区域，不读取真实姿态。
    - 验证：报告入区/越界概率、INCM NMSE 和输出 SINR。
    - 失败模式：谱对齐误把强干扰当作期望信号。
+   - Validation: 报告入区/越界概率、INCM NMSE 和输出 SINR。
+   - Possible failure: 谱对齐误把强干扰当作期望信号。
    - 创新状态：unverified。
 
 3. 名称：二维 UPA 功率守恒重构
@@ -165,4 +203,6 @@ No explicit author-acknowledged limitation was found in the supplied source.
    - 增量：显式区分点源功率估计与连续功率谱密度。
    - 验证：网格收敛性、主特征值偏差、子空间距离及高 INR 泄漏。
    - 失败模式：小型 UPA 的二维分辨率仍不足。
+   - Validation: 网格收敛性、主特征值偏差、子空间距离及高 INR 泄漏。
+   - Possible failure: 小型 UPA 的二维分辨率仍不足。
    - 创新状态：unverified。
