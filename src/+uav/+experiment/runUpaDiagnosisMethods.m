@@ -76,6 +76,8 @@ for methodIndex = 1:methodCount
                 "mvdr", estimatedIncm, aRef, methodCfg);
             methodDiagnostics = nonOracleDiagnostics(beamformingDiagnostics);
             methodDiagnostics.reconstruction = reconstructionDiagnostics;
+            % 估计矩阵仅供实验后与真值对比，不回流到任何候选或参数选择。
+            methodDiagnostics.estimatedIncm = estimatedIncm;
             methodDiagnostics.coreInvoked = true;
         case "upa_covfit_incm"
             [estimatedIncm, reconstructionDiagnostics] = uav.incm.upaCovfit( ...
@@ -84,6 +86,8 @@ for methodIndex = 1:methodCount
                 "mvdr", estimatedIncm, aRef, methodCfg);
             methodDiagnostics = nonOracleDiagnostics(beamformingDiagnostics);
             methodDiagnostics.reconstruction = reconstructionDiagnostics;
+            % 估计矩阵仅供实验后与真值对比，不回流到任何候选或参数选择。
+            methodDiagnostics.estimatedIncm = estimatedIncm;
             methodDiagnostics.usedTruth = reconstructionDiagnostics.usedTruth;
     end
     runtimeSec(methodIndex) = toc(methodTimer);

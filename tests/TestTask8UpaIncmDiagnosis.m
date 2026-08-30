@@ -163,6 +163,25 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
             testCase.verifyWarningFree(@() uav.config.validate(cfg));
         end
 
+        % 防止紧凑诊断被迫计算未选择的测度，同时拒绝空集和重复测度。
+        function diagnosisConfigurationAllowsSupportedMeasureSubset(testCase)
+            cfg = config("smoke");
+            cfg.literature.guLeshem2012.upaDiagnosis.measureNames = ...
+                ["direction_cosine", "solid_angle"];
+            cfg.literature.guLeshem2012.upaDiagnosis.selectedMeasureName = ...
+                "solid_angle";
+            validated = uav.config.validate(cfg);
+            testCase.verifyEqual( ...
+                validated.literature.guLeshem2012.upaDiagnosis.measureNames, ...
+                ["direction_cosine", "solid_angle"]);
+
+            invalid = cfg;
+            invalid.literature.guLeshem2012.upaDiagnosis.measureNames = ...
+                ["solid_angle", "solid_angle"];
+            testCase.verifyError(@() uav.config.validate(invalid), ...
+                'uav:config:InvalidExperimentParameter');
+        end
+
         % 防止欠定快拍仍误用过时配置L，或在重构中泄漏真实方向与真实INCM。
         function upaCovfitUsesObservedUnderdeterminedSnapshotsWithoutTruth(testCase)
             cfg = config("smoke");
@@ -327,6 +346,51 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
             testCase.verifyTrue(all(record.snapshotSignature == ...
                 record.snapshotSignature(1, :), 'all'));
         end
+
+        % 防止实验9遗漏配对维度、独立WCO诊断或任一种事务导出文件。
+        function compactExperimentNineExportsPairedDiagnosisBundle(testCase)
+            cfg = compactDiagnosisConfig(testCase);
+
+            result = exp09_upa_incm_diagnosis(cfg);
+
+            testCase.verifyEqual(result.methodNames, ...
+                ["oracle", "esp", "wco", "gu_leshem2012_rec", ...
+                "upa_covfit_incm"]);
+            testCase.verifyEqual(result.snapshotCounts, [8, 64]);
+            testCase.verifySize(result.raw.zeroJitter.sinrLinear, ...
+                [1, 2, 2, 2, 5]);
+            testCase.verifySize(result.raw.zeroJitter.status, ...
+                [1, 2, 2, 2, 5]);
+            testCase.verifySize(result.raw.jitterSweep.sinrLinear, ...
+                [1, 1, 3, 2, 5]);
+            testCase.verifySize( ...
+                result.raw.jitterSweep.upaCovfitWcoSinrLinear, [1, 1, 3, 2]);
+            testCase.verifyTrue(all( ...
+                result.raw.zeroJitter.snapshotPrefixMatched, 'all'));
+            testCase.verifyTrue(all( ...
+                result.raw.jitterSweep.snapshotPrefixMatched, 'all'));
+            testCase.verifyTrue(all(isnan( ...
+                result.raw.zeroJitter.originalRec.traceRatio(:, 1, :, :)), ...
+                'all'));
+            testCase.verifyTrue(all(result.raw.zeroJitter.status( ...
+                :, 1, :, :, 4) == "singular-not-applicable", 'all'));
+            testCase.verifyTrue(all(isnan(result.raw.zeroJitter.sinrLinear( ...
+                :, 1, :, :, 4)), 'all'));
+            testCase.verifyTrue(all(isfinite( ...
+                result.raw.zeroJitter.upaCovfit.traceRatio), 'all'));
+            testCase.verifyEqual(result.raw.zeroJitter.sinrLinear(:, :, :, 1, 5), ...
+                result.raw.zeroJitter.sinrLinear(:, :, :, 2, 5), 'AbsTol', 0);
+            testCase.verifyEqual( ...
+                result.summary.zeroJitter.sinr.aggregationDomain, "linear");
+            testCase.verifyFalse(any(uav.experiment.entryPoints() == ...
+                "exp09_upa_incm_diagnosis"));
+            artifactPaths = string(struct2cell( ...
+                rmfield(result.artifacts, 'status')));
+            testCase.verifyTrue(all(isfile(artifactPaths)));
+            testCase.verifyEqual(result.artifacts.status, "complete");
+            testCase.verifyTrue(isfield(result, 'cfg'));
+            testCase.verifyTrue(isfield(result, 'metadata'));
+        end
     end
 
     methods (Access = private)
@@ -343,4 +407,39 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
                 uav.util.makeStream(251, 2));
         end
     end
+end
+
+
+function cfg = compactDiagnosisConfig(testCase)
+%COMPACTDIAGNOSISCONFIG 用隔离目录运行完整但最小的实验9链路。
+cfg = config("smoke");
+diagnosis = cfg.literature.guLeshem2012.upaDiagnosis;
+diagnosis.monteCarloTrials = 1;
+diagnosis.periods = 1;
+diagnosis.gridSizes = [21, 31];
+diagnosis.measureNames = ["direction_cosine", "solid_angle"];
+diagnosis.selectedGridSize = 21;
+diagnosis.selectedMeasureName = "solid_angle";
+cfg.literature.guLeshem2012.upaDiagnosis = diagnosis;
+cfg.experiments.bootstrapReplicates = 4;
+cfg.plot.visible = false;
+cfg.plot.closeAfterExport = true;
+cfg.output.overwrite = true;
+outputRoot = tempname;
+mkdir(outputRoot);
+testCase.addTeardown(@() cleanupDiagnosisDirectory(outputRoot));
+cfg.output.rootDir = outputRoot;
+cfg.output.rawDir = fullfile(outputRoot, 'raw');
+cfg.output.tableDir = fullfile(outputRoot, 'tables');
+cfg.output.figureDir = fullfile(outputRoot, 'figures');
+cfg.output.logDir = fullfile(outputRoot, 'logs');
+cfg.output.cacheDir = fullfile(outputRoot, 'cache');
+cfg = uav.config.validate(cfg);
+end
+
+function cleanupDiagnosisDirectory(pathValue)
+%CLEANUPDIAGNOSISDIRECTORY 清理本测试独占的可再生成导出文件。
+if isfolder(pathValue)
+    rmdir(pathValue, 's');
+end
 end
