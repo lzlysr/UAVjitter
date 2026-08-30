@@ -255,5 +255,90 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
             testCase.verifyEqual(diagnostics.desiredCandidateFallback, ...
                 "deduplicated-with-nominal");
         end
+
+        % 防止短快拍不是长快拍的逐元素前缀，或遗漏pilot和真值干扰符号。
+        function shortObservationIsExactPrefixAndRecomputesCovariance(testCase)
+            [~, obs64] = testCase.zeroJitterObservation(64);
+
+            obs8 = uav.scenario.truncatePeriodObservation(obs64, 8);
+
+            testCase.verifyEqual(obs8.X, obs64.X(:, 1:8));
+            testCase.verifyEqual(obs8.pilot, obs64.pilot(1:8));
+            testCase.verifyEqual(obs8.truth.interfererSymbols, ...
+                obs64.truth.interfererSymbols(:, 1:8));
+            testCase.verifyEqual(obs8.Rx, obs8.X * obs8.X' / 8, ...
+                'AbsTol', 1e-13);
+            testCase.verifyEqual(obs64.Rx, obs64.X * obs64.X' / 64, ...
+                'AbsTol', 1e-13);
+            testCase.verifyEqual(obs8.truth.trueIncm, obs64.truth.trueIncm);
+        end
+
+        % 防止L<M时短快拍原始Rec仍调用核心函数或伪装为可用结果。
+        function shortObservationMarksOriginalRecUnavailableWithoutCoreCall(testCase)
+            [cfg64, obs64] = testCase.zeroJitterObservation(64);
+            obs8 = uav.scenario.truncatePeriodObservation(obs64, 8);
+            cfg8 = cfg64;
+            cfg8.timeline.L = 8;
+            cfg8 = uav.config.validate(cfg8);
+            grid = uav.spectrum.upaIntegrationGrid(cfg8, 21, "solid_angle");
+
+            record = uav.experiment.runUpaDiagnosisMethods(obs8, cfg8, ...
+                ["oracle", "gu_leshem2012_rec", "upa_covfit_incm"], grid);
+
+            testCase.verifyTrue(isnan(record.sinrLinear(2)));
+            testCase.verifyTrue(all(isnan(record.weights(:, 2))));
+            testCase.verifyTrue(isnan(record.incmNmse(2)));
+            testCase.verifyEqual(record.status(2), "singular-not-applicable");
+            testCase.verifyEqual(record.diagnostics{2}.coreInvoked, false);
+            testCase.verifyEqual(record.reasonCode(2), "L-less-than-M");
+            testCase.verifyThat(record.reason(2), ...
+                matlab.unittest.constraints.ContainsSubstring("快拍数"));
+            testCase.verifyTrue(isfinite(record.sinrLinear(3)));
+            testCase.verifyFalse(record.diagnostics{3}.usedTruth);
+        end
+
+        % 防止执行器擅自重排方法，或把未选择的方法插入结果。
+        function upaDiagnosisRunnerPreservesArbitraryMethodSubsetAndOrder(testCase)
+            [cfg, obs] = testCase.zeroJitterObservation(64);
+            grid = uav.spectrum.upaIntegrationGrid(cfg, 21, "solid_angle");
+            methods = ["wco", "oracle", "esp"];
+
+            record = uav.experiment.runUpaDiagnosisMethods(obs, cfg, methods, grid);
+
+            testCase.verifyEqual(record.methodNames, methods);
+            testCase.verifySize(record.weights, [cfg.derived.M, numel(methods)]);
+            testCase.verifyTrue(all(isfinite(record.sinrLinear)));
+            testCase.verifyEqual(record.status, repmat("ok", 1, numel(methods)));
+        end
+
+        % 防止非Oracle方法在执行器中获得truth，或在指标之前读取真实量。
+        function upaDiagnosisRunnerAuditsTruthIsolation(testCase)
+            [cfg, obs] = testCase.zeroJitterObservation(64);
+            grid = uav.spectrum.upaIntegrationGrid(cfg, 21, "solid_angle");
+            methods = ["esp", "wco", "gu_leshem2012_rec", "upa_covfit_incm"];
+
+            record = uav.experiment.runUpaDiagnosisMethods(obs, cfg, methods, grid);
+
+            for methodIndex = 1:numel(methods)
+                diagnostics = record.diagnostics{methodIndex};
+                testCase.verifyFalse(diagnostics.algorithmInputHasTruth);
+                testCase.verifyFalse(diagnostics.usedTruth);
+            end
+            testCase.verifyTrue(all(record.snapshotSignature == ...
+                record.snapshotSignature(1, :), 'all'));
+        end
+    end
+
+    methods (Access = private)
+        function [cfg, obs] = zeroJitterObservation(~, snapshotCount)
+            %ZEROJITTEROBSERVATION 构造同一零姿态抖动配对快拍的测试输入。
+            cfg = config("smoke");
+            cfg.timeline.L = snapshotCount;
+            cfg.attitude.jitterStdDeg = [0, 0, 0];
+            cfg = uav.config.validate(cfg);
+            scenario = uav.scenario.generate(cfg, uav.util.makeStream(251, 1));
+            obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
+                uav.util.makeStream(251, 2));
+        end
     end
 end
