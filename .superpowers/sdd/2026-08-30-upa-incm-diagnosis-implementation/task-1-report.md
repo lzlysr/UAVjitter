@@ -74,3 +74,25 @@ git diff --check
 ```
 
 最终关键输出：`14 Passed, 0 Failed, 0 Incomplete`；`checkcode`与`git diff --check`均无输出。21/51/101/201网格下，`az_el_solid_angle`总测度误差依次为`1.4650e-3`、`2.4836e-4`、`6.3324e-5`、`1.5989e-5`，单调下降；等立体角网格的排除后立体角误差分别为`4.7277e-2`、`3.1562e-3`、`4.6458e-4`、`1.5149e-3`，均受测试中的分辨率容差约束，并由单元中心对球冠边界的离散化误差解释。
+
+## 范围复审修复
+
+复审指出：`direction_cosine` 的主积分权重必须继续定义为`du*dv`，但其公开的 `representedSolidAngle` 不能继续用方向余弦圆盘边界附近的`du*dv/|uz|`估算。现已保持该测度原有的主积分`nodes`、`weights`和`manifold`不变；仅为该公开诊断建立同一 `gridSize` 的方位角/z等立体角辅助网格，并在辅助节点上复用 `admissibleDirections` 排除掩码。`solid_angle`与`az_el_solid_angle`仍分别以各自主网格的正确`dOmega`权重计算该字段。
+
+范围复审RED命令：
+
+```text
+matlab -batch "startup; r=runtests('tests/TestTask8UpaIncmDiagnosis.m'); assertSuccess(r)"
+```
+
+修复前关键输出：`direction_cosine` 在21/51/101/201网格的排除后立体角误差为`2.4374e-1`、`1.3420`、`1.7770e-2`、`3.8680e-1`，既超出同分辨率离散容差，也没有稳定收敛行为。
+
+范围复审GREEN与最终校验命令：
+
+```text
+matlab -batch "startup; r=runtests({'tests/TestTask8UpaIncmDiagnosis.m','tests/TestTask1Contracts.m'}); assertSuccess(r)"
+matlab -batch "startup; checkcode('src/+uav/+spectrum/upaIntegrationGrid.m','-id'); checkcode('tests/TestTask8UpaIncmDiagnosis.m','-id')"
+git diff --check
+```
+
+最终关键输出：`14 Passed, 0 Failed, 0 Incomplete`；`checkcode`和`git diff --check`无输出。测试现对三种测度均断言 `representedSolidAngle` 接近默认场景的理论值`2*pi*cos(halfWidth)`；方向余弦与等立体角测度共用等立体角辅助覆盖诊断，方位角/高度角测度保留自身离散收敛特性。

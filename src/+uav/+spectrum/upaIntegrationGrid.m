@@ -7,11 +7,17 @@ validateInputs(cfg, gridSize, measureName);
 measureName = string(measureName);
 switch measureName
     case "direction_cosine"
-        [nodes, weights, solidAngleWeights] = directionCosineGrid(gridSize);
+        [nodes, weights] = directionCosineGrid(gridSize);
+        % 主积分保持方向余弦面积元；公开立体角诊断改由独立等立体角网格计算。
+        [coverageNodes, coverageWeights] = azimuthZGrid(gridSize);
     case "solid_angle"
-        [nodes, weights, solidAngleWeights] = azimuthZGrid(gridSize);
+        [nodes, weights] = azimuthZGrid(gridSize);
+        coverageNodes = nodes;
+        coverageWeights = weights;
     case "az_el_solid_angle"
-        [nodes, weights, solidAngleWeights] = azElGrid(gridSize);
+        [nodes, weights] = azElGrid(gridSize);
+        coverageNodes = nodes;
+        coverageWeights = weights;
 end
 
 manifold = uav.array.steeringUPA(nodes.', cfg.array.Nx, cfg.array.Ny, ...
@@ -19,11 +25,12 @@ manifold = uav.array.steeringUPA(nodes.', cfg.array.Nx, cfg.array.Ny, ...
 admissibleMask = uav.spectrum.admissibleDirections(nodes, cfg);
 desiredMask = ~admissibleMask;
 includedMask = ~desiredMask;
+coverageMask = uav.spectrum.admissibleDirections(coverageNodes, cfg);
 grid = struct( ...
     'nodes', nodes, ...
     'manifold', manifold, ...
     'weights', reshape(weights, 1, []), ...
-    'representedSolidAngle', sum(solidAngleWeights(includedMask)), ...
+    'representedSolidAngle', sum(coverageWeights(coverageMask)), ...
     'measureName', measureName, ...
     'desiredMask', desiredMask, ...
     'includedMask', includedMask);
@@ -49,19 +56,17 @@ if ~(ischar(measureName) || (isstring(measureName) && isscalar(measureName))) ||
 end
 end
 
-function [nodes, weights, solidAngleWeights] = directionCosineGrid(gridSize)
+function [nodes, weights] = directionCosineGrid(gridSize)
 %DIRECTIONCOSINEGRID 在方向余弦单元中心构造可见圆盘上的节点。
 step = 2 / gridSize;
 axisValues = -1 + step / 2 + step * (0:gridSize - 1);
 [xiX, xiY] = meshgrid(axisValues, axisValues);
 visibleMask = xiX.^2 + xiY.^2 <= 1;
 nodes = [xiX(visibleMask), xiY(visibleMask)];
-uz = sqrt(1 - sum(nodes.^2, 2));
-solidAngleWeights = step^2 ./ abs(uz);
-weights = step^2 * ones(size(solidAngleWeights));
+weights = step^2 * ones(size(nodes, 1), 1);
 end
 
-function [nodes, weights, solidAngleWeights] = azimuthZGrid(gridSize)
+function [nodes, weights] = azimuthZGrid(gridSize)
 %AZIMUTHZGRID 用方位角和z方向余弦的等立体角单元覆盖下半球。
 %   z取[-1,0]单元中心，dOmega=daz*dz，不经过可见圆盘边界的
 %   奇异Jacobian；因此所有网格大小的总权重严格等于2*pi。
@@ -73,11 +78,10 @@ z = -1 + dz / 2 + dz * (0:gridSize - 1);
 radial = sqrt(1 - zGrid(:).^2);
 nodes = [radial .* cos(azimuthGrid(:)), ...
     radial .* sin(azimuthGrid(:))];
-solidAngleWeights = daz * dz * ones(gridSize^2, 1);
-weights = solidAngleWeights;
+weights = daz * dz * ones(gridSize^2, 1);
 end
 
-function [nodes, weights, solidAngleWeights] = azElGrid(gridSize)
+function [nodes, weights] = azElGrid(gridSize)
 %AZELGRID 在方位角和下半球高度角单元中心构造立体角求积节点。
 daz = 2 * pi / gridSize;
 del = pi / (2 * gridSize);
@@ -86,6 +90,5 @@ elevation = -pi / 2 + del / 2 + del * (0:gridSize - 1);
 [azimuthGrid, elevationGrid] = meshgrid(azimuth, elevation);
 nodes = [cos(elevationGrid(:)) .* cos(azimuthGrid(:)), ...
     cos(elevationGrid(:)) .* sin(azimuthGrid(:))];
-solidAngleWeights = cos(elevationGrid(:)) * daz * del;
-weights = solidAngleWeights;
+weights = cos(elevationGrid(:)) * daz * del;
 end

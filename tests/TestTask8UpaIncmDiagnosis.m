@@ -40,12 +40,14 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
             cfg = config("smoke");
             gridSizes = [21, 51, 101, 201];
             azElErrors = zeros(size(gridSizes));
-            representedErrors = zeros(size(gridSizes));
+            representedErrors = zeros(3, numel(gridSizes));
             halfWidth = deg2rad(cfg.spectrum.desiredExclusionHalfWidthDeg);
             expectedIncludedSolidAngle = 2 * pi * cos(halfWidth);
 
             for index = 1:numel(gridSizes)
                 gridSize = gridSizes(index);
+                directionCosineGrid = uav.spectrum.upaIntegrationGrid(cfg, ...
+                    gridSize, "direction_cosine");
                 solidAngleGrid = uav.spectrum.upaIntegrationGrid(cfg, ...
                     gridSize, "solid_angle");
                 azElGrid = uav.spectrum.upaIntegrationGrid(cfg, ...
@@ -53,15 +55,21 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
                 testCase.verifyEqual(sum(solidAngleGrid.weights), 2 * pi, ...
                     'AbsTol', 2048 * eps(2 * pi));
                 azElErrors(index) = abs(sum(azElGrid.weights) - 2 * pi);
-                representedErrors(index) = abs( ...
-                    solidAngleGrid.representedSolidAngle - ...
-                    expectedIncludedSolidAngle);
+                grids = [directionCosineGrid, solidAngleGrid, azElGrid];
+                for measureIndex = 1:numel(grids)
+                    representedErrors(measureIndex, index) = abs( ...
+                        grids(measureIndex).representedSolidAngle - ...
+                        expectedIncludedSolidAngle);
+                end
             end
 
             testCase.verifyLessThan(azElErrors(2:end), azElErrors(1:end-1));
-            testCase.verifyLessThanOrEqual(representedErrors, ...
+            testCase.verifyLessThanOrEqual(representedErrors(1:2, :), ...
+                repmat([0.08, 0.02, 0.01, 0.01], 2, 1));
+            testCase.verifyLessThanOrEqual(representedErrors(3, :), ...
                 [0.08, 0.02, 0.01, 0.01]);
-            testCase.verifyLessThan(representedErrors(end), representedErrors(1));
+            testCase.verifyLessThan(representedErrors(1, end), ...
+                representedErrors(1, 1));
         end
 
         % 防止诊断配置把向量误当单值参数，或放宽低快拍和正加载合同。
