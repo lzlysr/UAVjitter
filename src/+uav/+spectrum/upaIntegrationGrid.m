@@ -6,8 +6,10 @@ function grid = upaIntegrationGrid(cfg, gridSize, measureName)
 validateInputs(cfg, gridSize, measureName);
 measureName = string(measureName);
 switch measureName
-    case {"direction_cosine", "solid_angle"}
-        [nodes, weights, solidAngleWeights] = directionCosineGrid(gridSize, measureName);
+    case "direction_cosine"
+        [nodes, weights, solidAngleWeights] = directionCosineGrid(gridSize);
+    case "solid_angle"
+        [nodes, weights, solidAngleWeights] = azimuthZGrid(gridSize);
     case "az_el_solid_angle"
         [nodes, weights, solidAngleWeights] = azElGrid(gridSize);
 end
@@ -47,7 +49,7 @@ if ~(ischar(measureName) || (isstring(measureName) && isscalar(measureName))) ||
 end
 end
 
-function [nodes, weights, solidAngleWeights] = directionCosineGrid(gridSize, measureName)
+function [nodes, weights, solidAngleWeights] = directionCosineGrid(gridSize)
 %DIRECTIONCOSINEGRID 在方向余弦单元中心构造可见圆盘上的节点。
 step = 2 / gridSize;
 axisValues = -1 + step / 2 + step * (0:gridSize - 1);
@@ -56,11 +58,23 @@ visibleMask = xiX.^2 + xiY.^2 <= 1;
 nodes = [xiX(visibleMask), xiY(visibleMask)];
 uz = sqrt(1 - sum(nodes.^2, 2));
 solidAngleWeights = step^2 ./ abs(uz);
-if measureName == "direction_cosine"
-    weights = step^2 * ones(size(solidAngleWeights));
-else
-    weights = solidAngleWeights;
+weights = step^2 * ones(size(solidAngleWeights));
 end
+
+function [nodes, weights, solidAngleWeights] = azimuthZGrid(gridSize)
+%AZIMUTHZGRID 用方位角和z方向余弦的等立体角单元覆盖下半球。
+%   z取[-1,0]单元中心，dOmega=daz*dz，不经过可见圆盘边界的
+%   奇异Jacobian；因此所有网格大小的总权重严格等于2*pi。
+daz = 2 * pi / gridSize;
+dz = 1 / gridSize;
+azimuth = -pi + daz / 2 + daz * (0:gridSize - 1);
+z = -1 + dz / 2 + dz * (0:gridSize - 1);
+[azimuthGrid, zGrid] = meshgrid(azimuth, z);
+radial = sqrt(1 - zGrid(:).^2);
+nodes = [radial .* cos(azimuthGrid(:)), ...
+    radial .* sin(azimuthGrid(:))];
+solidAngleWeights = daz * dz * ones(gridSize^2, 1);
+weights = solidAngleWeights;
 end
 
 function [nodes, weights, solidAngleWeights] = azElGrid(gridSize)

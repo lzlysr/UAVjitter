@@ -140,14 +140,15 @@ if ~isstruct(diagnosis) || ~all(isfield(diagnosis, required))
     experimentError('guLeshem2012.upaDiagnosis is incomplete.');
 end
 
-validatePositiveIntegerCandidates(diagnosis.snapshotCounts, ...
-    'guLeshem2012.upaDiagnosis.snapshotCounts');
+if ~isequal(diagnosis.snapshotCounts, [8, 64])
+    experimentError('UPA diagnosis snapshot counts must equal [8, 64].');
+end
 validatePositiveIntegerCandidates(diagnosis.gridSizes, ...
     'guLeshem2012.upaDiagnosis.gridSizes');
 if any(diagnosis.gridSizes < 3) || any(mod(diagnosis.gridSizes, 2) == 0)
     experimentError('UPA diagnosis grid sizes must be odd integers at least three.');
 end
-validatePositiveIntegerCandidates(diagnosis.selectedGridSize, ...
+validatePositiveIntegerScalar(diagnosis.selectedGridSize, ...
     'guLeshem2012.upaDiagnosis.selectedGridSize');
 if ~ismember(diagnosis.selectedGridSize, diagnosis.gridSizes)
     experimentError('UPA diagnosis selected grid size must be a configured grid size.');
@@ -167,26 +168,26 @@ if ~isstring(diagnosis.selectedMeasureName) || ...
     experimentError('UPA diagnosis selected measure must be a configured measure name.');
 end
 
-validateNonnegativeCandidates(diagnosis.loadingRatio, ...
-    'guLeshem2012.upaDiagnosis.loadingRatio', inf);
-validatePositiveScalar(diagnosis.fitRegularization, ...
+validatePositiveFiniteScalar(diagnosis.loadingRatio, ...
+    'guLeshem2012.upaDiagnosis.loadingRatio');
+validateNonnegativeFiniteScalar(diagnosis.fitRegularization, ...
     'guLeshem2012.upaDiagnosis.fitRegularization');
-validateNonnegativeCandidates(diagnosis.peakThresholdRatio, ...
-    'guLeshem2012.upaDiagnosis.peakThresholdRatio', 1 + eps);
+validateUnitIntervalScalar(diagnosis.peakThresholdRatio, ...
+    'guLeshem2012.upaDiagnosis.peakThresholdRatio');
 validateNonnegativeIntegerScalar(diagnosis.peakNmsRadiusBins, ...
     'guLeshem2012.upaDiagnosis.peakNmsRadiusBins');
-validatePositiveIntegerCandidates(diagnosis.maximumCandidateCount, ...
+validatePositiveIntegerScalar(diagnosis.maximumCandidateCount, ...
     'guLeshem2012.upaDiagnosis.maximumCandidateCount');
 validateNonnegativeCandidates(diagnosis.jitterSweepDeg, ...
     'guLeshem2012.upaDiagnosis.jitterSweepDeg', inf);
-validatePositiveIntegerCandidates(diagnosis.monteCarloTrials, ...
+validatePositiveIntegerScalar(diagnosis.monteCarloTrials, ...
     'guLeshem2012.upaDiagnosis.monteCarloTrials');
-validatePositiveIntegerCandidates(diagnosis.periods, ...
+validatePositiveIntegerScalar(diagnosis.periods, ...
     'guLeshem2012.upaDiagnosis.periods');
 if diagnosis.periods > cfg.timeline.K
     experimentError('UPA diagnosis periods cannot exceed timeline.K.');
 end
-validatePositiveIntegerCandidates(diagnosis.experimentIndex, ...
+validatePositiveIntegerScalar(diagnosis.experimentIndex, ...
     'guLeshem2012.upaDiagnosis.experimentIndex');
 end
 
@@ -209,10 +210,33 @@ if ~isnumeric(values) || ~isvector(values) || isempty(values) || ...
 end
 end
 
-function validatePositiveScalar(value, name)
-%VALIDATEPOSITIVESCALAR 校验有限正标量。
+function validatePositiveFiniteScalar(value, name)
+%VALIDATEPOSITIVEFINITESCALAR 校验有限正标量。
 if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value <= 0
     experimentError('%s must be a positive finite scalar.', name);
+end
+end
+
+function validateNonnegativeFiniteScalar(value, name)
+%VALIDATENONNEGATIVEFINITESCALAR 校验有限非负标量。
+if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || value < 0
+    experimentError('%s must be a nonnegative finite scalar.', name);
+end
+end
+
+function validateUnitIntervalScalar(value, name)
+%VALIDATEUNITINTERVALSCALAR 校验闭区间[0,1]内的有限标量。
+if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+        value < 0 || value > 1
+    experimentError('%s must be a finite scalar in [0, 1].', name);
+end
+end
+
+function validatePositiveIntegerScalar(value, name)
+%VALIDATEPOSITIVEINTEGERSCALAR 校验有限正整数标量。
+if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value) || ...
+        value <= 0 || value ~= floor(value)
+    experimentError('%s must be a positive integer scalar.', name);
 end
 end
 
