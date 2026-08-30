@@ -10,7 +10,13 @@
 - 在五方法权值和INCM形成后，分别保存原始Rec与UPA协方差拟合的迹比、最大特征值比、归一化特征值谱误差、条件数、干扰子空间距离及真实干扰邻域诊断。`J=0`时子空间距离和扇区汇总安全返回0。
 - 抖动分支另存同一UPA协方差拟合INCM配WCO权值的独立SINR曲线，未改写五方法主数组。
 - SINR先在线性样本域汇总，再将统计量转换为dB；原始Rec低快拍NaN由既有有限样本统计合同处理。
-- 图包含零抖动双快拍、网格收敛、特征值谱误差、抖动SINR和扇区违约五个中文面板，并通过统一收尾模块事务导出MAT、CSV、FIG、PDF、PNG和JSON。
+- 图包含零抖动双快拍、网格收敛、特征值谱误差、L=8/L=64抖动SINR和扇区违约六个中文面板，并通过统一收尾模块事务导出MAT、CSV、FIG、PDF、PNG和JSON。
+
+## 独立审查修复
+
+- 单干扰 `J=1`：汇总函数不再通过 `ndims`猜测尾随干扰维；调用者显式传入 `cfg.derived.J`，`J=0`直接返回规定形状的零数组，`J>0`先恢复 `[输出形状,J]` 再沿干扰维取最大值。
+- 双快拍图示：2×3布局现在分别包含标题严格为 `L=8抖动扫描` 与 `L=64抖动扫描` 的面板；网格收敛与特征值谱误差面板也同时展示两种快拍，原始Rec的L=8曲线保持NaN不适用语义。
+- 真值访问阶段：`runUpaDiagnosisMethods`重构为“全部非Oracle算法与权值形成—Oracle—统一真值指标”三个明确阶段；用户方法顺序、任意子集、运行时间口径和结果字段保持不变。
 
 ## 最小批准修改
 
@@ -22,12 +28,16 @@
 1. 测度子集测试先因旧校验要求必须包含全部三种测度而失败，最小放宽后通过。
 2. 紧凑实验9集成测试随后以 `MATLAB:UndefinedFunction` 失败，确认入口尚不存在。
 3. 实现后，紧凑配置按1试次、1周期、网格 `[21,31]`、两测度和快拍 `[8,64]` 完整运行，检查了主数组维度、状态、精确前缀、测度独立性、独立WCO曲线、入口隔离及六类文件。
+4. 独立审查后，`J=1`完整实验先稳定复现 `MATLAB:getReshapeDims:notSameNumel`，显式干扰维修复后通过零抖动、抖动汇总和六类导出。
+5. 导出FIG标题测试先因缺少 `L=8抖动扫描` 失败，六面板双快拍绘图修复后同时找到L=8与L=64标题并安全关闭图窗。
+6. 三阶段测试把Oracle置于首位、令truth不可读并让后续WCO确定性失败；旧执行器先报 `MATLAB:nonExistentField`，重构后先报预期的 `uav:beamforming:InfeasibleUncertainty`，从控制流结果证明非Oracle阶段先于任何Oracle真值访问。
 
 ## 验证结果
 
-- `TestTask8UpaIncmDiagnosis`：17项通过，0项失败。
-- 相关回归 `TestTask1Contracts`、`TestTask7GuLeshem2012Rec`、`TestTask5Experiments`：合计36项通过，0项失败。
+- `TestTask8UpaIncmDiagnosis`：19项通过，0项失败。
+- Task 8及相关回归 `TestTask1Contracts`、`TestTask7GuLeshem2012Rec`、`TestTask5Experiments`：合计55项通过，0项失败。
 - J=0隔离探针：实验9完整链路通过，UPA诊断子空间距离和最大干扰扇区违约率均按合同返回0。
+- J=1隔离探针：实验9完整链路、两分支最大干扰扇区汇总和六类导出通过。
 - 修改及新增MATLAB文件 `checkcode`：0条消息。
 - `git diff --check`：无空白错误。
 

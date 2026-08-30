@@ -19,6 +19,7 @@ diagnostics = cell(1, methodCount);
 status = repmat("ok", 1, methodCount);
 reason = repmat("", 1, methodCount);
 reasonCode = repmat("", 1, methodCount);
+estimatedIncms = cell(1, methodCount);
 
 % 所有非Oracle方法只构造一次白名单视图，确保它们收到完全相同的观测。
 hasNonOracle = any(methodNames ~= "oracle");
@@ -31,19 +32,15 @@ snapshotCount = size(obs.X, 2);
 % 名义参考随观测携带，五种方法在本调用中共享同一个参考向量。
 aRef = obs.nominalSteeringReference;
 
-for methodIndex = 1:methodCount
+% 第一阶段：按用户结果索引执行全部非Oracle算法，但绝不读取obs.truth。
+nonOracleIndices = find(methodNames ~= "oracle");
+for phaseIndex = 1:numel(nonOracleIndices)
+    methodIndex = nonOracleIndices(phaseIndex);
     methodTimer = tic;
     method = methodNames(methodIndex);
     estimatedIncm = [];
     methodDiagnostics = struct();
     switch method
-        case "oracle"
-            [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
-                "mvdr", obs.truth.trueIncm, obs.truth.trueASVs(:, 1), methodCfg);
-            methodDiagnostics = struct( ...
-                'truthAccess', "oracle-only", ...
-                'usedTruth', true, ...
-                'beamforming', beamformingDiagnostics);
         case "esp"
             [weight, beamformingDiagnostics] = uav.beamforming.eigenspaceProjection( ...
                 safeObservation.Rx, aRef, methodCfg);
@@ -91,19 +88,42 @@ for methodIndex = 1:methodCount
             methodDiagnostics.usedTruth = reconstructionDiagnostics.usedTruth;
     end
     runtimeSec(methodIndex) = toc(methodTimer);
+    estimatedIncms{methodIndex} = estimatedIncm;
+    weights(:, methodIndex) = weight;
+    diagnostics{methodIndex} = methodDiagnostics;
+end
+
+% 第二阶段：全部非Oracle算法完成后，才允许Oracle读取真实INCM与导向。
+oracleIndex = find(methodNames == "oracle", 1);
+if ~isempty(oracleIndex)
+    oracleTimer = tic;
+    [oracleWeight, beamformingDiagnostics] = uav.beamforming.solve( ...
+        "mvdr", obs.truth.trueIncm, obs.truth.trueASVs(:, 1), methodCfg);
+    runtimeSec(oracleIndex) = toc(oracleTimer);
+    weights(:, oracleIndex) = oracleWeight;
+    diagnostics{oracleIndex} = struct( ...
+        'truthAccess', "oracle-only", ...
+        'usedTruth', true, ...
+        'beamforming', beamformingDiagnostics);
+end
+
+% 第三阶段：权值和估计INCM全部形成后，统一读取真值计算可用方法指标。
+for methodIndex = 1:methodCount
+    if status(methodIndex) ~= "ok"
+        continue;
+    end
     metricTruth = obs.truth;
+    estimatedIncm = estimatedIncms{methodIndex};
     if ~isempty(estimatedIncm)
         metricTruth.estimatedIncm = estimatedIncm;
     end
-    metrics = uav.metrics.evaluate(weight, metricTruth, methodCfg);
+    metrics = uav.metrics.evaluate(weights(:, methodIndex), metricTruth, methodCfg);
     sinrLinear(methodIndex) = metrics.sinrLinear;
     desiredGain(methodIndex) = metrics.desiredGain;
     interferenceLeakage(methodIndex) = metrics.interferenceLeakage;
     if isfield(metrics, 'incmNmse')
         incmNmse(methodIndex) = metrics.incmNmse;
     end
-    weights(:, methodIndex) = weight;
-    diagnostics{methodIndex} = methodDiagnostics;
 end
 
 signature = uav.util.snapshotSignature(obs.X);

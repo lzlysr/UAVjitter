@@ -347,6 +347,18 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
                 record.snapshotSignature(1, :), 'all'));
         end
 
+        % 防止Oracle排在用户列表前部时提前读取truth，越过尚未完成的非Oracle阶段。
+        function nonOracleFailurePrecedesAnyOracleTruthAccess(testCase)
+            [cfg, obs] = testCase.zeroJitterObservation(64);
+            grid = uav.spectrum.upaIntegrationGrid(cfg, 21, "solid_angle");
+            obs.truth = struct();
+            obs.nominalSteeringReference = zeros(cfg.derived.M, 1);
+
+            testCase.verifyError(@() uav.experiment.runUpaDiagnosisMethods( ...
+                obs, cfg, ["oracle", "wco"], grid), ...
+                'uav:beamforming:InfeasibleUncertainty');
+        end
+
         % 防止实验9遗漏配对维度、独立WCO诊断或任一种事务导出文件。
         function compactExperimentNineExportsPairedDiagnosisBundle(testCase)
             cfg = compactDiagnosisConfig(testCase);
@@ -388,8 +400,36 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
                 rmfield(result.artifacts, 'status')));
             testCase.verifyTrue(all(isfile(artifactPaths)));
             testCase.verifyEqual(result.artifacts.status, "complete");
+            exportedFigure = openfig(result.artifacts.fig, 'invisible');
+            figureCleanup = onCleanup(@() closeDiagnosisFigure(exportedFigure));
+            axesHandles = findall(exportedFigure, 'Type', 'axes');
+            panelTitles = strings(numel(axesHandles), 1);
+            for axesIndex = 1:numel(axesHandles)
+                panelTitles(axesIndex) = string(axesHandles(axesIndex).Title.String);
+            end
+            testCase.verifyTrue(any(panelTitles == "L=8抖动扫描"));
+            testCase.verifyTrue(any(panelTitles == "L=64抖动扫描"));
+            close(exportedFigure);
+            clear figureCleanup;
+            testCase.verifyFalse(isgraphics(exportedFigure));
             testCase.verifyTrue(isfield(result, 'cfg'));
             testCase.verifyTrue(isfield(result, 'metadata'));
+        end
+
+        % 防止单干扰场景的尾随singleton被误判为干扰维并破坏汇总导出。
+        function oneInterfererExperimentSummariesAndArtifactsRemainValid(testCase)
+            cfg = compactDiagnosisConfig(testCase, 1);
+
+            result = exp09_upa_incm_diagnosis(cfg);
+
+            testCase.verifyEqual(result.cfg.derived.J, 1);
+            testCase.verifySize( ...
+                result.summary.zeroJitter.maximumInterfererInsideRate, [2, 2]);
+            testCase.verifySize( ...
+                result.summary.jitterSweep.maximumInterfererInsideRate, [3, 1]);
+            artifactPaths = string(struct2cell( ...
+                rmfield(result.artifacts, 'status')));
+            testCase.verifyTrue(all(isfile(artifactPaths)));
         end
     end
 
@@ -410,9 +450,15 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
 end
 
 
-function cfg = compactDiagnosisConfig(testCase)
+function cfg = compactDiagnosisConfig(testCase, interfererCount)
 %COMPACTDIAGNOSISCONFIG 用隔离目录运行完整但最小的实验9链路。
+if nargin < 2
+    interfererCount = 2;
+end
 cfg = config("smoke");
+cfg.sources.interfererAzElDeg = ...
+    cfg.sources.interfererAzElDeg(1:interfererCount, :);
+cfg.sources.interfererInrDb = cfg.sources.interfererInrDb(1:interfererCount);
 diagnosis = cfg.literature.guLeshem2012.upaDiagnosis;
 diagnosis.monteCarloTrials = 1;
 diagnosis.periods = 1;
@@ -441,5 +487,12 @@ function cleanupDiagnosisDirectory(pathValue)
 %CLEANUPDIAGNOSISDIRECTORY 清理本测试独占的可再生成导出文件。
 if isfolder(pathValue)
     rmdir(pathValue, 's');
+end
+end
+
+function closeDiagnosisFigure(figureHandle)
+%CLOSEDIAGNOSISFIGURE 安全关闭FIG标题检查中打开的不可见图窗。
+if isgraphics(figureHandle, 'figure')
+    close(figureHandle);
 end
 end

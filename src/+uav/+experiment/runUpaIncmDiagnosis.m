@@ -393,7 +393,7 @@ summary.zeroJitter.desiredOutsideRate = reshape(mean( ...
     zeroRaw.desiredOutsideExclusion, 1), numel(grids), numel(measures));
 summary.zeroJitter.maximumInterfererInsideRate = maximumInterfererRate( ...
     zeroRaw.interfererInsideExclusion, 1, ...
-    [numel(grids), numel(measures)]);
+    [numel(grids), numel(measures)], cfg.derived.J);
 
 jitterGroups = numel(jitterPoints) * numel(snapshots) * numel(methods);
 jitterSamples = reshape(jitterRaw.sinrLinear, diagnosis.monteCarloTrials, ...
@@ -418,7 +418,8 @@ summary.jitterSweep.upaCovfit = summarizeIncmDiagnostics( ...
 summary.jitterSweep.desiredOutsideRate = reshape(mean( ...
     jitterRaw.desiredOutsideExclusion, [1, 2]), numel(jitterPoints), 1);
 summary.jitterSweep.maximumInterfererInsideRate = maximumInterfererRate( ...
-    jitterRaw.interfererInsideExclusion, [1, 2], [numel(jitterPoints), 1]);
+    jitterRaw.interfererInsideExclusion, [1, 2], ...
+    [numel(jitterPoints), 1], cfg.derived.J);
 end
 
 function output = reshapeLinearSummary(input, outputShape)
@@ -453,19 +454,23 @@ for fieldIndex = 1:numel(fields)
 end
 end
 
-function rate = maximumInterfererRate(values, reductionDimensions, outputShape)
+function rate = maximumInterfererRate(values, reductionDimensions, ...
+        outputShape, interfererCount)
 %MAXIMUMINTERFERERRATE 汇总任一真实干扰进入期望排除区的最高发生率。
-if size(values, ndims(values)) == 0
+%   MATLAB会折叠尾随singleton，故不能用ndims猜测干扰维的位置。
+if interfererCount == 0
     rate = zeros(outputShape);
     return;
 end
 averaged = mean(values, reductionDimensions);
-rate = reshape(max(averaged, [], ndims(averaged)), outputShape);
+averaged = reshape(averaged, [outputShape, interfererCount]);
+rate = max(averaged, [], numel(outputShape) + 1);
+rate = reshape(rate, outputShape);
 end
 
 function fig = plotDiagnosis(summary, cfg, snapshots, grids, measures, ...
         jitterPoints, methods, diagnosis)
-%PLOTDIAGNOSIS 用五个中文面板展示链路诊断，不据smoke图作性能结论。
+%PLOTDIAGNOSIS 用六个中文面板展示链路诊断，不据smoke图作性能结论。
 fig = uav.plot.newFigure(cfg);
 position = fig.Position;
 position(3:4) = max(position(3:4), [1600, 900]);
@@ -487,42 +492,62 @@ title('零抖动双快拍对比');
 legend("L=" + string(snapshots), 'Location', 'best'); grid on; box on;
 
 nexttile(layout); hold on;
-convergenceMethods = [1, 4, 5];
-for methodIndex = convergenceMethods
-    values = squeeze(summary.zeroJitter.sinr.meanDb(end, :, ...
-        selectedMeasure, methodIndex));
-    plot(grids, values, '-o', 'LineWidth', cfg.plot.lineWidth, ...
-        'MarkerSize', cfg.plot.markerSize, 'Color', colors(methodIndex, :));
+for snapshotIndex = 1:numel(snapshots)
+    lineStyle = snapshotLineStyle(snapshotIndex);
+    recValues = squeeze(summary.zeroJitter.sinr.meanDb(snapshotIndex, :, ...
+        selectedMeasure, 4));
+    plot(grids, recValues, lineStyle + "o", 'LineWidth', cfg.plot.lineWidth, ...
+        'MarkerSize', cfg.plot.markerSize, 'Color', colors(4, :));
+end
+for snapshotIndex = 1:numel(snapshots)
+    lineStyle = snapshotLineStyle(snapshotIndex);
+    upaValues = squeeze(summary.zeroJitter.sinr.meanDb(snapshotIndex, :, ...
+        selectedMeasure, 5));
+    plot(grids, upaValues, lineStyle + "s", 'LineWidth', cfg.plot.lineWidth, ...
+        'MarkerSize', cfg.plot.markerSize, 'Color', colors(5, :));
 end
 xlabel('二维谱网格边长'); ylabel('平均输出SINR/dB');
-title("L=" + snapshots(end) + "网格收敛");
-legend(labels(convergenceMethods), 'Location', 'best'); grid on; box on;
+title('零抖动双快拍网格收敛');
+legend(["原始Rec，L=8（不适用）", "原始Rec，L=64", ...
+    "UPA协方差拟合，L=8", "UPA协方差拟合，L=64"], ...
+    'Location', 'best'); grid on; box on;
 
 nexttile(layout); hold on;
-recError = squeeze(summary.zeroJitter.originalRec. ...
-    normalizedEigenvalueProfileError.mean(end, :, selectedMeasure));
-upaError = squeeze(summary.zeroJitter.upaCovfit. ...
-    normalizedEigenvalueProfileError.mean(end, :, selectedMeasure));
-plot(grids, recError, '-o', 'LineWidth', cfg.plot.lineWidth, ...
-    'MarkerSize', cfg.plot.markerSize);
-plot(grids, upaError, '-s', 'LineWidth', cfg.plot.lineWidth, ...
-    'MarkerSize', cfg.plot.markerSize);
-xlabel('二维谱网格边长'); ylabel('归一化特征值谱误差');
-title('INCM相对谱结构诊断');
-legend(["原始Rec", "UPA协方差拟合"], 'Location', 'best'); grid on; box on;
-
-nexttile(layout); hold on;
-for methodIndex = 1:numel(methods)
-    plot(jitterPoints, squeeze(summary.jitterSweep.sinr.meanDb(:, end, ...
-        methodIndex)), '-o', 'LineWidth', cfg.plot.lineWidth, ...
-        'MarkerSize', cfg.plot.markerSize, 'Color', colors(methodIndex, :));
+for snapshotIndex = 1:numel(snapshots)
+    lineStyle = snapshotLineStyle(snapshotIndex);
+    recError = squeeze(summary.zeroJitter.originalRec. ...
+        normalizedEigenvalueProfileError.mean(snapshotIndex, :, selectedMeasure));
+    plot(grids, recError, lineStyle + "o", 'LineWidth', cfg.plot.lineWidth, ...
+        'MarkerSize', cfg.plot.markerSize, 'Color', colors(4, :));
 end
-plot(jitterPoints, squeeze(summary.jitterSweep.upaCovfitWco.meanDb(:, end)), ...
-    '--d', 'LineWidth', cfg.plot.lineWidth, 'MarkerSize', cfg.plot.markerSize, ...
-    'Color', [0.2, 0.2, 0.2]);
-xlabel('三轴姿态抖动RMS/°'); ylabel('平均输出SINR/dB');
-title("L=" + snapshots(end) + "抖动扫描");
-legend([labels, "UPA协方差拟合+WCO权值"], 'Location', 'best'); grid on; box on;
+for snapshotIndex = 1:numel(snapshots)
+    lineStyle = snapshotLineStyle(snapshotIndex);
+    upaError = squeeze(summary.zeroJitter.upaCovfit. ...
+        normalizedEigenvalueProfileError.mean(snapshotIndex, :, selectedMeasure));
+    plot(grids, upaError, lineStyle + "s", 'LineWidth', cfg.plot.lineWidth, ...
+        'MarkerSize', cfg.plot.markerSize, 'Color', colors(5, :));
+end
+xlabel('二维谱网格边长'); ylabel('归一化特征值谱误差');
+title('INCM双快拍特征值谱误差');
+legend(["原始Rec，L=8（不适用）", "原始Rec，L=64", ...
+    "UPA协方差拟合，L=8", "UPA协方差拟合，L=64"], ...
+    'Location', 'best'); grid on; box on;
+
+for snapshotIndex = 1:numel(snapshots)
+    nexttile(layout); hold on;
+    for methodIndex = 1:numel(methods)
+        plot(jitterPoints, squeeze(summary.jitterSweep.sinr.meanDb(:, ...
+            snapshotIndex, methodIndex)), '-o', 'LineWidth', cfg.plot.lineWidth, ...
+            'MarkerSize', cfg.plot.markerSize, 'Color', colors(methodIndex, :));
+    end
+    plot(jitterPoints, squeeze(summary.jitterSweep.upaCovfitWco.meanDb(:, ...
+        snapshotIndex)), '--d', 'LineWidth', cfg.plot.lineWidth, ...
+        'MarkerSize', cfg.plot.markerSize, 'Color', [0.2, 0.2, 0.2]);
+    xlabel('三轴姿态抖动RMS/°'); ylabel('平均输出SINR/dB');
+    title("L=" + snapshots(snapshotIndex) + "抖动扫描");
+    legend([labels, "UPA协方差拟合+WCO权值"], ...
+        'Location', 'best'); grid on; box on;
+end
 
 nexttile(layout); hold on;
 plot(jitterPoints, summary.jitterSweep.desiredOutsideRate, '-o', ...
@@ -536,6 +561,12 @@ legend(["期望移出", "任一干扰进入"], 'Location', 'best'); grid on; box
 allAxes = findall(fig, 'Type', 'axes');
 set(allAxes, 'FontSize', cfg.plot.fontSize, 'LineWidth', ...
     max(0.5, cfg.plot.lineWidth - 1));
+end
+
+function style = snapshotLineStyle(snapshotIndex)
+%SNAPSHOTLINESTYLE 用线型区分快拍条件，避免同方法颜色语义变化。
+styles = ["--", "-"];
+style = styles(snapshotIndex);
 end
 
 function labels = methodLabels(methods)
