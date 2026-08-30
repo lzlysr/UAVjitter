@@ -330,13 +330,15 @@ classdef TestTask8UpaIncmDiagnosis < matlab.unittest.TestCase
     end
 
     methods (Access = private)
-        function [cfg, obs] = zeroJitterObservation(~, snapshotCount)
+        function [cfg, obs] = zeroJitterObservation(testCase, snapshotCount)
             %ZEROJITTEROBSERVATION 构造同一零姿态抖动配对快拍的测试输入。
             cfg = config("smoke");
             cfg.timeline.L = snapshotCount;
-            cfg.attitude.jitterStdDeg = [0, 0, 0];
+            cfg.attitude.stdDeg = [0, 0, 0];
             cfg = uav.config.validate(cfg);
             scenario = uav.scenario.generate(cfg, uav.util.makeStream(251, 1));
+            testCase.verifyEqual(scenario.attitudeOffsetRad, ...
+                zeros(size(scenario.attitudeOffsetRad)), 'AbsTol', 1e-15);
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
                 uav.util.makeStream(251, 2));
         end
