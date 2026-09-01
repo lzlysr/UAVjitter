@@ -86,9 +86,11 @@ for methodIndex = 1:methodCount
                 "wco", safeObservation.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
         case "static_incm_mvdr"
-            [estimatedIncm, ~, reconstructionDiagnostics] = ...
-                uav.incm.reconstruct("static", safeObservation, [], cfg);
-            reconstructionDiagnostics.method = "static";
+            % 外部方法名保持不变，内部已由稠密Capon积分替换为UPA候选
+            % 非负协方差拟合；期望候选参与联合拟合但不进入最终INCM。
+            [estimatedIncm, reconstructionDiagnostics] = ...
+                uav.incm.upaCovfit(safeObservation, cfg);
+            reconstructionDiagnostics.method = "static_incm_mvdr";
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "mvdr", estimatedIncm, aRef, cfg);
             methodDiagnostics = struct( ...

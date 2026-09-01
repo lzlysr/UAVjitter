@@ -226,6 +226,8 @@ result = exp02_jitter_sweep(cfg);
 ### 8.6 `+incm`：INCM重构
 
 - `reconstruct.m`：静态和时序INCM的统一入口。静态方法使用当前周期Capon谱和均匀求积；时序方法依次进行谱对齐、非负时序稀疏增强、峰值选择、自适应求积和结构投影。该文件还负责噪声功率估计、期望区排除和可选训练序列投影。
+- `upaCovfit.m`：经典实验中的 `static_incm_mvdr` 实际重构核心。它从加载Capon谱提取少量期望/干扰候选，用非负协方差拟合估计候选功率，随后删除期望候选项并形成干扰加噪声协方差；不读取真实方向、真实干扰数或真实INCM。
+- `fitNonnegativePowers.m`：把Hermitian协方差映射到保持Frobenius范数的实向量空间，并以带L2正则项的非负最小二乘估计候选空间功率。
 - `temporalProx.m`：求解非负逐元素时序稀疏目标。利用目标函数的分段凸结构枚举精确候选点，不依赖CVX。
 - `projectStructure.m`：对原始INCM依次执行Hermitian化、半正定投影、特征值下限和可配置收缩，保证输出有限、Hermitian且半正定。
 
@@ -355,16 +357,19 @@ result = exp06_classic_method_jitter_sweep(cfg);
 NSB使用配置中的标称期望和干扰方向；NLMS与RLS使用已知期望QPSK训练
 序列；PI固定配置参考阵元；ESP使用配置的信号子空间维数；WCO采用离线
 固定的球形导向不确定集且不附加 `gamma` 正则项；`static_incm_mvdr`
-使用静态Capon-INCM重构和标准MVDR，因此不会把鲁棒权值收益混入普通
-INCM基线。除Oracle外，所有方法均不能读取当前试次真实姿态、真实方向
+保留原方法标识，但从2026-08-30起，其内部重构已由“期望区外稠密Capon
+均匀积分”替换为“UPA候选提取、非负协方差拟合、删除期望候选项”，最终
+仍接标准MVDR，因此不会把鲁棒权值收益混入INCM重构收益。CovFit专用参数
+集中在 `cfg.incm.staticCovfit`。除Oracle外，所有方法均不能读取真实姿态、真实方向
 或真实INCM。
 
 ## 10.2 经典方法参数筛选与锁定验证
 
-`runClassicJitterParameterStudy.m`在同一批配对观测上分别筛选DL-MVDR、
-ESP、WCO和静态INCM参数，并在筛选后调用 `runClassicJitterSweep.m`生成
-正式实验6结果。所有候选范围集中配置在
-`cfg.experiments.classicTuning`，实验函数内部不散落数值参数。
+`runClassicJitterParameterStudy.m`原先在同一批配对观测上筛选DL-MVDR、
+ESP、WCO和旧静态Capon积分INCM参数。由于 `static_incm_mvdr` 的重构核心
+已替换，旧筛选结果及旧静态INCM的谱加载/收缩参数不再代表当前方法；在
+重新设计CovFit参数筛选协议前，不应使用该脚本为当前 `static_incm_mvdr`
+给出参数最优性结论。DL、ESP和WCO的历史筛选逻辑不受方法替换影响。
 
 推荐按“smoke筛选、preliminary锁定验证”的顺序运行：
 
@@ -375,9 +380,9 @@ preliminaryStudy = runClassicJitterParameterStudy( ...
     config("preliminary"), smokeStudy.selections);
 ```
 
-评分规则固定为“所有抖动扫描点中位SINR的最小值”，优先保证整条曲线
-稳定。静态INCM按谱加载、期望区半宽和收缩系数的固定顺序执行坐标筛选；
-其他三种方法分别在自身候选范围内取最优值，不能故意选择较差参数。
+旧版评分规则固定为“所有抖动扫描点中位SINR的最小值”。其中静态INCM
+曾按谱加载、期望区半宽和收缩系数执行坐标筛选；这部分仅用于解释历史
+结果，不适用于当前CovFit实现。其他三种方法仍分别在自身候选范围内取优。
 WCO候选若使离线标定半径达到或超过参考导向矢量范数，将在候选表中明确
 标记为不可行，不参与排名，也不会静默删除。
 

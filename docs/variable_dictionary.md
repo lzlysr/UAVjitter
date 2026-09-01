@@ -17,6 +17,11 @@
 | `Rx_k` | `M×M` | 样本协方差矩阵 `X X^H/L` | 算法观测 |
 | `Rin_k` | `M×M` | 理论干扰加噪声协方差矩阵 | Oracle或指标模块 |
 | `RinHat_k` | `M×M` | 重构得到的INCM | 算法估计量 |
+| `incm.staticCovfit.loadingRatio` | 标量 | `static_incm_mvdr`候选Capon谱的相对加载系数，当前默认0.12 | 配置参数 |
+| `incm.staticCovfit.fitRegularization` | 标量 | 非负协方差拟合的L2正则化系数，当前默认5000 | 配置参数 |
+| `incm.staticCovfit.peakThresholdRatio` | 标量 | 相对谱峰阈值，当前默认0.15 | 配置参数 |
+| `incm.staticCovfit.peakNmsRadiusBins` | 非负整数 | 二维非极大值抑制半径，单位为网格点，当前默认0 | 配置参数 |
+| `incm.staticCovfit.maximumCandidateCount` | 正整数 | 干扰候选数配置上限，实际还受 `M-1` 限制，当前默认7 | 配置参数 |
 | `p_k, c_k` | 网格矩阵 | 残余Capon谱和时序增强谱 | 估计量或状态量 |
 | `G_k` | 平移诊断量 | 从上一周期空间谱到当前周期空间谱的对齐关系 | 估计量或状态量 |
 | `w` | `M×1` | 复波束形成权值 | 算法输出 |
@@ -32,7 +37,7 @@
 | `classicTuning.scoreRule` | 字符串 | 参数筛选评分规则，固定为各抖动点中位SINR的最小值 | 配置参数 |
 | `minimumPointMedianSinrDb` | 标量 | 一条抖动扫描曲线中最低的逐点中位SINR | 参数筛选指标 |
 | `validCandidate` | 逻辑标量 | 参数候选是否满足标定和求解可行性 | 参数筛选诊断 |
-| `selection` | 结构体 | 对某一快拍数锁定的DL、ESP、WCO和静态INCM参数 | smoke输出/验证输入 |
+| `selection` | 结构体 | 替换前参数研究对DL、ESP、WCO和旧静态Capon积分INCM锁定的参数；其中旧静态INCM字段不适用于当前CovFit | 历史smoke输出/验证输入 |
 | `nlmsState` | 结构体 | NLMS上一周期权值 | 算法状态 |
 | `rlsState` | 结构体 | RLS上一周期权值和逆相关矩阵 | 算法状态 |
 | `epsilonS` | 标量 | WCO或鲁棒权值使用的球形导向不确定集半径 | 离线标定配置 |
