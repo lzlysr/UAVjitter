@@ -17,10 +17,10 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
         % 新实验必须提供完整默认集合，同时允许用户选择任意合法非空组合。
         function configAllowsSelectableClassicMethodCombinations(testCase)
             cfg = config('smoke');
-            % 当前“已完成工作”图默认只比较用户指定的五种方法；合法全集
+            % 当前“已完成工作”图默认比较原五种方法并加入现有static；合法全集
             % 仍由配置校验器维护，用户可以继续改成任意非空且不重复子集。
             expected = ["oracle", "dl_mvdr", "esp", "wco", ...
-                "static_incm_mvdr"];
+                "static", "static_incm_mvdr"];
 
             testCase.verifyEqual(cfg.experiments.classicJitterMethodNames, expected);
             testCase.verifyGreaterThan( ...

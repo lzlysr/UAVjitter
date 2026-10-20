@@ -1,6 +1,6 @@
 function [record, nextState] = runClassicMethods(obs, priorState, cfg, methodNames)
 %RUNCLASSICMETHODS 在同一观测上运行用户选择的经典方法组合。
-%   methodNames可从配置支持的11种方法中任意选择且保持给定顺序。除
+%   methodNames可从配置支持的方法中任意选择且保持给定顺序。除
 %   Oracle外，所有方法只读取白名单观测、配置先验和自身上一周期状态；
 %   真实INCM和真实导向矢量只在Oracle求权值及统一指标评价阶段使用。
 
@@ -85,6 +85,17 @@ for methodIndex = 1:methodCount
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "wco", safeObservation.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
+        case "static"
+            % 直接复用原有static积分重构，不更改谱底、求积或结构处理。
+            % 此经典对照接标准MVDR，与CovFit保持相同的名义响应约束。
+            % 主线runMethods中的static仍接原鲁棒求解器，保持其定义不变。
+            [estimatedIncm, ~, reconstructionDiagnostics] = ...
+                uav.incm.reconstruct("static", safeObservation, [], cfg);
+            [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
+                "mvdr", estimatedIncm, aRef, cfg);
+            methodDiagnostics = struct( ...
+                'reconstruction', reconstructionDiagnostics, ...
+                'beamforming', beamformingDiagnostics);
         case "static_incm_mvdr"
             % 外部方法名保持不变，内部已由稠密Capon积分替换为UPA候选
             % 非负协方差拟合；期望候选参与联合拟合但不进入最终INCM。
@@ -147,7 +158,7 @@ end
 
 function validateMethodSelection(methodNames)
 allowed = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr", "static"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowed))

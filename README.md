@@ -397,6 +397,35 @@ WCO候选若使离线标定半径达到或超过参考导向矢量范数，将�
 对应profile目录。当前实测结论和解释边界见
 [经典方法参数研究结果](docs/classic_parameter_study_results.md)。
 
+## 10.3 汇报用的两种INCM路线对照
+
+实验6默认组合现为Oracle、DL、ESP、WCO、原有`static`和CovFit
+（方法标识仍为`static_incm_mvdr`）。新实验7使用相同默认组合扫描快拍数：
+
+```matlab
+startup;
+cfg = config("preliminary");
+jitterResult = exp06_classic_method_jitter_sweep(cfg);
+snapshotResult = exp07_classic_method_snapshot_sweep(cfg);
+```
+
+两图的方法分别在`config.m`的`classicJitterMethodNames`和
+`classicSnapshotMethodNames`中选取。实验6固定`timeline.L=32`，扫描
+`jitterSweepDeg=0:1:20`；实验7固定`attitude.stdDeg=[5,5,5]`，扫描
+`snapshotSweep=8:100:512`（实际为8、108、208、308、408、508）。可在同一配置入口自行调整。
+
+新增的经典`static`直接复用原积分重构器，再接与CovFit相同的标准MVDR。
+原主线实验中的`static`仍接原鲁棒权值接口，未改变。两张新图不包含原始
+Gu–Leshem Rec，不能把工程static当作该原论文的完整复现。
+
+图例区分“积分INCM（static）”和“CovFit-INCM”；输出在`results/figures`
+下的`exp06_classic_method_jitter_sweep_<profile>`与
+`exp07_classic_method_snapshot_sweep_<profile>`，均有FIG/PDF/PNG，另存
+完整MAT、CSV和日志。相同profile重跑会覆盖工程内同名结果。
+
+前两页PPT大纲、论文依据、公式边界及完整参数说明见
+[组会大纲与实验说明](docs/incm_presentation_outline_and_experiments_2026-10-20.md)。
+
 ## 11. 结果文件
 
 每个实验成功后生成：
