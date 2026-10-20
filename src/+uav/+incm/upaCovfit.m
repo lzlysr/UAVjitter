@@ -61,6 +61,21 @@ else
 end
 interfererNodes = uniqueNodes(interfererNodes, desiredNodes, tolerance);
 
+% 专项根因研究的显式候选细化开关；默认关闭，既有方法定义保持不变。
+% 开启后必须另列方法名称：这不是原始Rec，也不是历史CovFit结果。
+refinementDiagnostics = struct('enabled', false);
+if isfield(diagnosis, 'refineCandidates') && diagnosis.refineCandidates
+    [desiredRefined, desiredRefinement] = uav.spectrum.refineCaponNodes( ...
+        desiredNodes(2:end, :), spectrumDiagnostics.loadedCovariance, true, cfg);
+    [interfererRefined, interfererRefinement] = uav.spectrum.refineCaponNodes( ...
+        interfererNodes, spectrumDiagnostics.loadedCovariance, false, cfg);
+    refinedTolerance = cfg.experiments.recRootCause.candidateRefinement.dedupTolerance;
+    desiredNodes = uniqueNodes([nominalNode; desiredRefined], zeros(0, 2), refinedTolerance);
+    interfererNodes = uniqueNodes(interfererRefined, desiredNodes, refinedTolerance);
+    refinementDiagnostics = struct('enabled', true, ...
+        'desired', desiredRefinement, 'interferer', interfererRefinement);
+end
+
 [noisePower, noiseSource, noiseDiagnostics] = estimateNoisePower( ...
     obs.Rx, snapshotCount, cfg);
 candidateNodes = [desiredNodes; interfererNodes];
@@ -82,6 +97,7 @@ RinHat = interferenceCovariance + noisePower * eye(M);
 RinHat = (RinHat + RinHat') / 2;
 
 diagnostics = struct( ...
+    'candidateRefinement', refinementDiagnostics, ...
     'loading', spectrumDiagnostics.loading, ...
     'noiseSource', noiseSource, ...
     'noisePower', noisePower, ...

@@ -14,3 +14,6 @@ results/tables/*
 results/logs/*
 !results/logs/.gitkeep
 
+# 专项研究的矩阵、检查点和图均可重建，不将大型生成结果误加入源码提交。
+results/rec_root_cause/
+
