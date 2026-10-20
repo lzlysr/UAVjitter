@@ -12,6 +12,42 @@
 - Optimization Toolbox：用于求解球形导向矢量失配约束下的鲁棒权值；
 - MATLAB Unit Test：用于运行自动化测试。
 
+### Rec多场景研究入口（研究分支）
+
+`runRecComprehensiveStudy("preliminary")` 在独立研究分支中运行ULA/UPA多场景验证。
+参数统一位于 `config.m` 的 `cfg.experiments.recComprehensive`。
+协议见 [多场景验证协议](docs/rec_comprehensive_protocol_2026-10-20.md)。
+已完成的覆盖范围、主比较区间、强弱干扰反例和加密复核见 [多场景实验结果](docs/rec_comprehensive_results_2026-10-20.md)。
+
+```matlab
+startup
+directory = runRecComprehensiveStudy("preliminary");
+audit = auditRecComprehensiveStudy(directory);
+analysis = analyzeRecComprehensiveStudy(directory);
+plotRecComprehensiveStudy(directory);
+```
+
+- `recComprehensivePlan`：事先生成随机几何、规则角度网格及全部条件清单。
+- `runRecComprehensiveCase`：生成配对快拍，运行四个明确区分的既有方法，保存逐试次指标和失败状态。
+- `ulaStatic`：旧积分版static的一维移植；不是main中已替换的历史CovFit。
+- `runRecComprehensiveStudy`：6进程并行运行，冻结配置/源码签名，逐条件保存并支持相同版本续跑。需要Parallel Computing Toolbox。
+- `resumeRecComprehensiveStudy(directory)`：从指定冻结清单逐条件动态续跑；使用原配置并核对计算核心源码。只能在原批次已退出后调用，不得与同目录的其他写入进程同时运行。
+- `analyzeRecComprehensiveStudy`：逐几何中位数区间、失败率及几何—试次分层配对bootstrap，同时区间只适用于协议规定的主比较族。
+- `plotRecComprehensiveStudy`：生成完整几何损失分布和参数扫描的MATLAB诊断图，不隐去表现差的几何。
+- `auditRecComprehensiveStudy`：检查全部文件、Oracle上界、零抖动响应、跨区块逐元素配对和固定子集复跑。
+- `summarizeRecComprehensiveEvidence`：导出按几何等权的描述性汇总及同世界几何ULA/UPA配对表，不能用这张描述表替代主比较的同时区间。
+- `tests/TestRecComprehensive.m`：验证几何清单确定性、低快拍边界、空干扰/超自由度和一维移植。
+
+结果保存在 `results/rec_comprehensive/2026-10-20/<profile>/<源码与配置签名>/`，
+包含完整源码快照、逐条件MAT、CSV统计、审计MAT及FIG/PDF/PNG。
+`latest_run.mat` 记录本profile最新输出目录；修改代码或配置不会混用旧结果。
+单独运行不平衡补充区块时，使用 `runRecComprehensiveStudy("preliminary","imbalance")`，
+其指针单独保存为 `latest_imbalance_run.mat`，不覆盖主批次指针。
+需要事后加密复核时，使用 `runRecComprehensiveStudy("preliminary","numerical_refinement")`，
+只复核原12组UPA几何，使用2进程；通过 `auditRecGridConvergence(mainDirectory,denseDirectory)`
+导出与主批次的逐几何网格差值。它不随默认all自动运行。
+原始Rec在 `L<M` 时明确不适用，不用加载或伪逆偷偷改变其定义。
+
 ## 2. 快速开始
 
 运行某个实验：
