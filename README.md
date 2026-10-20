@@ -426,6 +426,31 @@ Gu–Leshem Rec，不能把工程static当作该原论文的完整复现。
 前两页PPT大纲、论文依据、公式边界及完整参数说明见
 [组会大纲与实验说明](docs/incm_presentation_outline_and_experiments_2026-10-20.md)。
 
+## 10.4 独立分支：Lin/Yue重构核心与CovFit根因研究
+
+本节仅适用于`codex/lin-yue-upa-snapshot-study`研究分支，不改变main方法。
+`runLinYueSnapshotStudy("smoke")`或`runLinYueSnapshotStudy("preliminary")`
+从用户实验7归档MAT读取实际物理参数，并使用原随机子流复放；最终期望导向
+固定，所有INCM接相同标准MVDR。`preliminary`沿用归档20试次×20周期，
+不是根配置的默认规模。研究参数集中在`config.m`的`linYueStudy`字段。
+
+新增文件职责：
+
+- `experiments/runLinYueSnapshotStudy.m`：同观测比较原CovFit、Lin/Yue功率核心、候选细化及Oracle诊断，保留失败状态。
+- `experiments/analyzeLinYueSnapshotStudy.m`：配对效应区间、候选精度、功率和失败率分析。
+- `experiments/auditLinYueNonnegativeFits.m`：独立复放全部样本，检查非负拟合的KKT条件；不修改求解器。
+- `experiments/analyzeLinYueAudit.m`：仅分析数值异常返回值对中位数的敏感性，不改写主结果。
+- `experiments/plotLinYueSnapshotStudy.m`：从保存的MAT导出主对比和0°/5°消融FIG/PDF/PNG，不重跑仿真。
+- `src/+uav/+incm/literaturePointPowers.m`：Lin点功率、Yue无约束LS和现有NNLS的共同候选功率接口。
+- `src/+uav/+spectrum/localPeakCandidates.m`：只提取二维局部极大值，区别于最强相邻网格单元。
+- `src/+uav/+spectrum/refineInterfererCandidates.m`：只细化干扰候选，禁止期望方向校正和真值输入。
+- `tests/TestLinYuePowerModules.m`：功率恢复、负功率不裁剪、低快拍不适用、正则尺度和候选真值隔离测试。
+
+这不是两篇论文完整算法复现；Lin的BCS和Yue的不同极化稀疏阵前端未移植。
+方法边界、复放配置和运行命令见[研究协议](docs/lin_yue_study_protocol_2026-10-21.md)，
+量化结果与不能隐藏的失败见[研究结论](docs/lin_yue_study_results_2026-10-21.md)。
+产物独立保存在`results/{raw,tables,figures,logs}/lin_yue_2026-10-21/`。
+
 ## 11. 结果文件
 
 每个实验成功后生成：

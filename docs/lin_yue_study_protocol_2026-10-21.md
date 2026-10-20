@@ -53,3 +53,7 @@ startup;
 r = runLinYueSnapshotStudy("smoke");
 r = runLinYueSnapshotStudy("preliminary");
 ```
+
+正式结果、功率核心和候选误差的区别、数值审计及后处理运行命令，见
+[研究结论](lin_yue_study_results_2026-10-21.md)。`auditKktTolerance=1e-8`
+仅用于独立审计，不改变原拟合器、主仿真结果或候选。
