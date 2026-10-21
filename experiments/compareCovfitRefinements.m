@@ -3,6 +3,11 @@ function comparison = compareCovfitRefinements(matPath)
 %   同时给出配对中位数比、试次簇bootstrap、逐周期差异和失败数。
 %   0.1dB只是事先明确的数值接近描述阈值，不冒称普适统计等效性。
 loaded=load(matPath,'result');r=loaded.result;cfg=r.cfg;
+% 兼容在新增描述阈值前导出的smoke；阈值只影响接近比例，不改任何仿真值。
+if ~isfield(cfg.experiments.linYueStudy,'comparisonToleranceDb')
+    request=config(cfg.profile);
+    cfg.experiments.linYueStudy.comparisonToleranceDb=request.experiments.linYueStudy.comparisonToleranceDb;
+end
 reference=find(r.methodNames=="refined_nnls0",1);
 names=["le_refined_covfit","le_shared_candidates"];
 T=size(r.raw.sinrLinear,1);K=size(r.raw.sinrLinear,2);rows={};
