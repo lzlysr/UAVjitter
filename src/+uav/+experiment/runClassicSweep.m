@@ -128,11 +128,11 @@ end
 function [lineStyle, marker] = classicMethodStyle(name)
 %CLASSICMETHODSTYLE 为每种经典方法返回固定且互不重复的绘图样式。
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr", "static"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "CovFit", "static", "CovFit_local"];
 lineStyles = ["--", "-", "--", "-.", "-.", "-", "--", "-.", ...
-    ":", "-", "--", "-."];
+    ":", "-", "--", "-.", ":"];
 markers = ["none", "o", "s", "^", "v", "d", "x", "+", "p", ...
-    "h", "*", "s"];
+    "h", "*", "s", ">"];
 [found, location] = ismember(string(name), catalogNames);
 if ~found
     error('uav:experiment:InvalidClassicMethodSelection', ...
@@ -144,10 +144,10 @@ end
 
 function labels = classicMethodLabels(names)
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr", "static"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "CovFit", "static", "CovFit_local"];
 catalogLabels = ["理想上界", "NSB", "冻结初始MVDR", "MVDR", ...
     "NLMS", "RLS", "PI", "DL", "ESP", "WCO", ...
-    "CovFit-INCM", "积分INCM（static）"];
+    "CovFit", "积分INCM（static）", "CovFit＋局部细化"];
 [found, locations] = ismember(names, catalogNames);
 if ~all(found)
     error('uav:experiment:InvalidClassicMethodSelection', ...

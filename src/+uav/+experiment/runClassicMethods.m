@@ -5,6 +5,8 @@ function [record, nextState] = runClassicMethods(obs, priorState, cfg, methodNam
 %   真实INCM和真实导向矢量只在Oracle求权值及统一指标评价阶段使用。
 
 methodNames = reshape(string(methodNames), 1, []);
+% 历史MAT/脚本仍可使用旧名；输出统一记录新标识，语义重复仍会被拒绝。
+methodNames(methodNames=="static_incm_mvdr")="CovFit";
 validateMethodSelection(methodNames);
 if ~isstruct(obs) || ~all(isfield(obs, {'X', 'Rx', 'pilot', 'truth'}))
     error('uav:experiment:InvalidObservation', ...
@@ -96,12 +98,16 @@ for methodIndex = 1:methodCount
             methodDiagnostics = struct( ...
                 'reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
-        case "static_incm_mvdr"
-            % 外部方法名保持不变，内部已由稠密Capon积分替换为UPA候选
-            % 非负协方差拟合；期望候选参与联合拟合但不进入最终INCM。
-            [estimatedIncm, reconstructionDiagnostics] = ...
-                uav.incm.upaCovfit(safeObservation, cfg);
-            reconstructionDiagnostics.method = "static_incm_mvdr";
+        case {"CovFit", "CovFit_local"}
+            % 两种重构接同一名义导向与标准MVDR；不叠加鲁棒权值增益。
+            if method=="CovFit"
+                [estimatedIncm, reconstructionDiagnostics] = ...
+                    uav.incm.upaCovfit(safeObservation, cfg);
+            else
+                [estimatedIncm,reconstructionDiagnostics]= ...
+                    uav.incm.localCovfit(safeObservation,cfg);
+            end
+            reconstructionDiagnostics.method = method;
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "mvdr", estimatedIncm, aRef, cfg);
             methodDiagnostics = struct( ...
@@ -158,7 +164,7 @@ end
 
 function validateMethodSelection(methodNames)
 allowed = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "static_incm_mvdr", "static"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "CovFit", "CovFit_local", "static"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowed))

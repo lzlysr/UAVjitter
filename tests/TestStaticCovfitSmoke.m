@@ -14,7 +14,7 @@ classdef TestStaticCovfitSmoke < matlab.unittest.TestCase
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
                 uav.util.makeStream(cfg.random.baseSeed, 902));
             [record, ~] = uav.experiment.runClassicMethods( ...
-                obs, [], cfg, "static_incm_mvdr");
+                obs, [], cfg, "CovFit");
 
             reconstruction = record.diagnostics{1}.reconstruction;
             testCase.verifyEqual(reconstruction.estimator, "upa-covfit");

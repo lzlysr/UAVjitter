@@ -17,11 +17,15 @@
 | `Rx_k` | `M×M` | 样本协方差矩阵 `X X^H/L` | 算法观测 |
 | `Rin_k` | `M×M` | 理论干扰加噪声协方差矩阵 | Oracle或指标模块 |
 | `RinHat_k` | `M×M` | 重构得到的INCM | 算法估计量 |
-| `incm.staticCovfit.loadingRatio` | 标量 | `static_incm_mvdr`候选Capon谱的相对加载系数，当前默认0.12 | 配置参数 |
+| `incm.staticCovfit.loadingRatio` | 标量 | `CovFit`候选Capon谱的相对加载系数，当前默认0.12 | 配置参数 |
 | `incm.staticCovfit.fitRegularization` | 标量 | 非负协方差拟合的L2正则化系数，当前默认5000 | 配置参数 |
 | `incm.staticCovfit.peakThresholdRatio` | 标量 | 相对谱峰阈值，当前默认0.15 | 配置参数 |
 | `incm.staticCovfit.peakNmsRadiusBins` | 非负整数 | 二维非极大值抑制半径，单位为网格点，当前默认0 | 配置参数 |
 | `incm.staticCovfit.maximumCandidateCount` | 正整数 | 干扰候选数配置上限，实际还受 `M-1` 限制，当前默认7 | 配置参数 |
+| `incm.localCovfit` | 结构体 | 新方法`CovFit_local`的独立参数，不覆盖旧CovFit | 配置参数 |
+| `incm.localCovfit.radiusBins` | 正标量 | 连续干扰峰搜索半径，单位为方向余弦网格间隔，默认2；不是2° | 配置参数 |
+| `incm.localCovfit.solver` | 结构体 | 局部细化的迭代上限、最优性/约束/步长及接受容差 | 配置参数 |
+| `relativeKktResidual` | 非负标量 | 非负功率拟合的相对KKT违反程度，局部方法超过阈值时报错 | 数值诊断 |
 | `p_k, c_k` | 网格矩阵 | 残余Capon谱和时序增强谱 | 估计量或状态量 |
 | `G_k` | 平移诊断量 | 从上一周期空间谱到当前周期空间谱的对齐关系 | 估计量或状态量 |
 | `w` | `M×1` | 复波束形成权值 | 算法输出 |

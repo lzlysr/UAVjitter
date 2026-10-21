@@ -20,7 +20,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             % 当前“已完成工作”图默认比较原五种方法并加入现有static；合法全集
             % 仍由配置校验器维护，用户可以继续改成任意非空且不重复子集。
             expected = ["oracle", "dl_mvdr", "esp", "wco", ...
-                "static", "static_incm_mvdr"];
+                "static", "CovFit", "CovFit_local"];
 
             testCase.verifyEqual(cfg.experiments.classicJitterMethodNames, expected);
             testCase.verifyGreaterThan( ...
@@ -94,7 +94,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             testCase.verifyEqual(screening.snapshotCount, 8);
             testCase.verifyEqual(screening.scoreRule, "minimum-point-median");
             testCase.verifyEqual(unique(screening.ranking.method, 'stable'), ...
-                ["dl_mvdr"; "esp"; "wco"; "static_incm_mvdr"]);
+                ["dl_mvdr"; "esp"; "wco"; "CovFit"]);
             testCase.verifyTrue(all(isfinite( ...
                 screening.ranking.minimumPointMedianSinrDb( ...
                 screening.ranking.validCandidate))));
@@ -258,7 +258,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
                 uav.util.makeStream(cfg.random.baseSeed, 610001));
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
                 uav.util.makeStream(cfg.random.baseSeed, 610101));
-            methods = ["oracle", "nsb", "nlms", "static_incm_mvdr"];
+            methods = ["oracle", "nsb", "nlms", "CovFit"];
 
             [record, nextState] = uav.experiment.runClassicMethods( ...
                 obs, [], cfg, methods);
@@ -281,7 +281,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             cfg = compactClassicConfig(testCase);
             cfg.experiments.jitterSweepDeg = [0, 1];
             cfg.experiments.classicJitterMethodNames = ...
-                ["scm_mvdr", "dl_mvdr", "static_incm_mvdr"];
+                ["scm_mvdr", "dl_mvdr", "CovFit"];
             cfg = uav.config.validate(cfg);
 
             result = exp06_classic_method_jitter_sweep(cfg);
@@ -306,7 +306,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             cfg.experiments.jitterSweepDeg = [0, 1];
             cfg.experiments.classicJitterMethodNames = ["oracle", "nsb", ...
                 "frozen_mvdr", "scm_mvdr", "nlms", "rls", "pi", ...
-                "dl_mvdr", "esp", "wco", "static_incm_mvdr"];
+                "dl_mvdr", "esp", "wco", "CovFit"];
             cfg = uav.config.validate(cfg);
 
             result = exp06_classic_method_jitter_sweep(cfg);

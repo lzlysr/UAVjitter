@@ -14,6 +14,14 @@ for index = 1:numel(requiredSections)
     end
 end
 
+% 旧方法标识兼容：只改名称，不改历史配置的物理参数；同义重复仍拒绝。
+for field={"classicJitterMethodNames","classicSnapshotMethodNames"}
+    name=field{1};
+    if isfield(cfg.experiments,name) && isstring(cfg.experiments.(name))
+        names=cfg.experiments.(name);names(names=="static_incm_mvdr")="CovFit";
+        cfg.experiments.(name)=names;
+    end
+end
 % 第一组：阵列、时间、姿态、随机和网格的基本尺寸与范围检查。
 validatePositiveInteger(cfg.array.Nx, 'array.Nx');
 validatePositiveInteger(cfg.array.Ny, 'array.Ny');
@@ -288,6 +296,33 @@ validateAlgorithmIntegerScalar(staticCovfit.peakNmsRadiusBins, ...
 validateAlgorithmIntegerScalar(staticCovfit.maximumCandidateCount, ...
     'incm.staticCovfit.maximumCandidateCount', true);
 validateAblationSwitches(cfg.incm.ablation);
+% 老MAT没有局部细化字段时仍可验证和重跑旧方法；新方法必须提供独立配置。
+if isfield(cfg.incm,'localCovfit')
+    local=cfg.incm.localCovfit;
+    fields={'loadingRatio','fitRegularization','peakThresholdRatio', ...
+        'peakNmsRadiusBins','maximumCandidateCount','radiusBins','kktTolerance','solver'};
+    if ~isstruct(local) || ~all(isfield(local,fields))
+        error('uav:config:InvalidAlgorithmParameter','incm.localCovfit配置字段不完整。');
+    end
+    validateNonnegativeFiniteScalar(local.loadingRatio,'incm.localCovfit.loadingRatio');
+    validateNonnegativeFiniteScalar(local.fitRegularization,'incm.localCovfit.fitRegularization');
+    validatePositiveFiniteScalar(local.peakThresholdRatio,'incm.localCovfit.peakThresholdRatio');
+    if local.peakThresholdRatio>1
+        error('uav:config:InvalidAlgorithmParameter','局部峰门限比例不能超过1。');
+    end
+    validateAlgorithmIntegerScalar(local.peakNmsRadiusBins,'incm.localCovfit.peakNmsRadiusBins',false);
+    validateAlgorithmIntegerScalar(local.maximumCandidateCount,'incm.localCovfit.maximumCandidateCount',true);
+    validatePositiveFiniteScalar(local.radiusBins,'incm.localCovfit.radiusBins');
+    validatePositiveFiniteScalar(local.kktTolerance,'incm.localCovfit.kktTolerance');
+    solverFields={'maxIterations','optimalityTolerance','constraintTolerance','stepTolerance','feasibilityTolerance'};
+    if ~isstruct(local.solver) || ~all(isfield(local.solver,solverFields))
+        error('uav:config:InvalidAlgorithmParameter','局部细化求解器配置字段不完整。');
+    end
+    for field=solverFields
+        validatePositiveFiniteScalar(local.solver.(field{1}),['incm.localCovfit.solver.' field{1}]);
+    end
+    validateAlgorithmIntegerScalar(local.solver.maxIterations,'incm.localCovfit.solver.maxIterations',true);
+end
 validateNonnegativeFiniteScalar(cfg.beamforming.diagonalLoading, ...
     'beamforming.diagonalLoading');
 validateNonnegativeFiniteScalar(cfg.beamforming.epsilonS, 'beamforming.epsilonS');
@@ -372,7 +407,7 @@ expectedMethods = ["oracle", "frozen", "scm", "dl", "static", "temporal"];
 allowedExp02Methods = expectedMethods;
 allowedClassicMethods = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", ...
     "nlms", "rls", "pi", "dl_mvdr", "esp", "wco", ...
-    "static_incm_mvdr", "static"];
+    "CovFit", "CovFit_local", "static"];
 expectedAblations = ["full", "lambda_t_zero", "identity_alignment", ...
     "uniform_quadrature", "no_structure", "pilot_projection"];
 if ~isstring(cfg.experiments.methodNames) || ...
@@ -398,6 +433,10 @@ if ~isstring(cfg.experiments.classicJitterMethodNames) || ...
         'unique subset of the supported classic methods.']);
 end
 validateClassicTuning(cfg.experiments.classicTuning);
+if any([classicMethods,reshape(cfg.experiments.classicSnapshotMethodNames,1,[])]=="CovFit_local") && ...
+        ~isfield(cfg.incm,'localCovfit')
+    experimentError('选择CovFit_local时必须提供incm.localCovfit配置。');
+end
 snapshotMethods = reshape(cfg.experiments.classicSnapshotMethodNames, 1, []);
 if ~isstring(cfg.experiments.classicSnapshotMethodNames) || ...
         isempty(snapshotMethods) || any(strlength(snapshotMethods) == 0) || ...

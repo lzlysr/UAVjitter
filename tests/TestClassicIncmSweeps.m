@@ -19,7 +19,7 @@ classdef TestClassicIncmSweeps < matlab.unittest.TestCase
             expected = uav.beamforming.solve("mvdr", matrix, ...
                 cfg.derived.nominalSteeringReference, cfg);
             record = uav.experiment.runClassicMethods(obs, [], cfg, ...
-                ["oracle", "static", "static_incm_mvdr"]);
+                ["oracle", "static", "CovFit"]);
             testCase.verifyEqual(record.weights(:, 2), expected, 'AbsTol', 1e-12);
             testCase.verifyEqual(record.diagnostics{2}.beamforming.method, "mvdr");
             testCase.verifyTrue(all(isfinite(record.sinrLinear)));
@@ -36,7 +36,7 @@ classdef TestClassicIncmSweeps < matlab.unittest.TestCase
             cfg.experiments.classicSnapshotMethodNames = "unknown";
             testCase.verifyError(@() uav.config.validate(cfg), 'uav:config:InvalidExperimentParameter');
         end
-        function bothSweepsExportPairedSixMethodResults(testCase)
+        function bothSweepsExportPairedSelectedMethodResults(testCase)
             cfg = config("smoke");
             folder = testCase.applyFixture(matlab.unittest.fixtures.TemporaryFolderFixture);
             cfg.output.rawDir = fullfile(folder.Folder, 'raw');
@@ -56,14 +56,14 @@ classdef TestClassicIncmSweeps < matlab.unittest.TestCase
             for result = {jitter, snapshots}
                 value = result{1};
                 testCase.verifyEqual(value.status, "complete");
-                testCase.verifyEqual(size(value.raw.sinrLinear), [2, 2, 2, 6]);
+                testCase.verifyEqual(size(value.raw.sinrLinear), [2, 2, 2, numel(value.methodNames)]);
                 testCase.verifyTrue(all(isfinite(value.raw.sinrLinear), 'all'));
                 testCase.verifyTrue(isfile(value.artifacts.mat));
                 testCase.verifyTrue(isfile(value.artifacts.fig));
                 testCase.verifyTrue(isfile(value.artifacts.pdf));
                 testCase.verifyTrue(isfile(value.artifacts.png));
                 testCase.verifyTrue(isfile(value.artifacts.csv));
-                for method = 2:6
+                for method = 2:numel(value.methodNames)
                     testCase.verifyEqual(value.raw.snapshotSignatures(:, :, :, 1, :), ...
                         value.raw.snapshotSignatures(:, :, :, method, :));
                 end
