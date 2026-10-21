@@ -451,6 +451,15 @@ Gu–Leshem Rec，不能把工程static当作该原论文的完整复现。
 量化结果与不能隐藏的失败见[研究结论](docs/lin_yue_study_results_2026-10-21.md)。
 产物独立保存在`results/{raw,tables,figures,logs}/lin_yue_2026-10-21/`。
 
+后续[两种CovFit细化与32快拍参数对照](docs/covfit_refinement_comparison_2026-10-21.md)
+已移植Gu–Leshem分支的完整细化版本，并加入共同候选控制组。
+`runLinYueSnapshotStudy`现追加这两条曲线，结果写入新目录
+`lin_yue_refinement_2026-10-21`，不会覆盖上段的历史产物。
+`runCovfitRefinementSweep("preliminary")`固定32快拍，分别扫描半径、迭代次数、
+最优性容差及谱加载；组合和扫描值在`config.m`的`linYueStudy.refinementSweep`。
+`compareCovfitRefinements`报告配对差异，`auditCovfitRefinementDifferences`
+仅对超过预定阈值的样本复放归因，不改变主性能统计。
+
 ## 11. 结果文件
 
 每个实验成功后生成：

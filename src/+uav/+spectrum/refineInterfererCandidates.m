@@ -13,14 +13,16 @@ radius=cfg.experiments.linYueStudy.refineCandidateRadiusBins*2/(cfg.spectrum.gri
 reference=cfg.derived.nominalArrayUnitVectors(:,1);
 cosineLimit=cosd(cfg.spectrum.desiredExclusionHalfWidthDeg);
 settings=cfg.beamforming.solver;
-if isfield(cfg.experiments.linYueStudy,'localRefinement')
+useStudySettings=isfield(cfg.experiments.linYueStudy,'localRefinement');
+if useStudySettings
     settings=cfg.experiments.linYueStudy.localRefinement;
 end
 options=optimoptions('fmincon','Algorithm','sqp','Display','off', ...
     'SpecifyObjectiveGradient',true,'MaxIterations',settings.maxIterations, ...
     'OptimalityTolerance',settings.optimalityTolerance, ...
     'StepTolerance',settings.stepTolerance);
-if isfield(settings,'constraintTolerance')
+% 旧MAT没有专用设置时保留原fmincon默认约束容差，不借用波束求解器容差。
+if useStudySettings && isfield(settings,'constraintTolerance')
     options.ConstraintTolerance=settings.constraintTolerance;
 end
 accepted=0;
