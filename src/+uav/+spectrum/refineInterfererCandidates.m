@@ -12,22 +12,33 @@ phaseDerivative=2*pi*[cfg.array.spacingOverLambda(1)*sensorX,cfg.array.spacingOv
 radius=cfg.experiments.linYueStudy.refineCandidateRadiusBins*2/(cfg.spectrum.gridSize-1);
 reference=cfg.derived.nominalArrayUnitVectors(:,1);
 cosineLimit=cosd(cfg.spectrum.desiredExclusionHalfWidthDeg);
+settings=cfg.beamforming.solver;
+if isfield(cfg.experiments.linYueStudy,'localRefinement')
+    settings=cfg.experiments.linYueStudy.localRefinement;
+end
 options=optimoptions('fmincon','Algorithm','sqp','Display','off', ...
-    'SpecifyObjectiveGradient',true,'MaxIterations',cfg.beamforming.solver.maxIterations, ...
-    'OptimalityTolerance',cfg.beamforming.solver.optimalityTolerance, ...
-    'StepTolerance',cfg.beamforming.solver.stepTolerance);
+    'SpecifyObjectiveGradient',true,'MaxIterations',settings.maxIterations, ...
+    'OptimalityTolerance',settings.optimalityTolerance, ...
+    'StepTolerance',settings.stepTolerance);
+if isfield(settings,'constraintTolerance')
+    options.ConstraintTolerance=settings.constraintTolerance;
+end
 accepted=0;
+exitflags=zeros(size(nodes,1)-D,1);acceptedMask=false(size(exitflags));
 for q=D+1:size(nodes,1)
     seed=nodes(q,:).';
     [value,score,flag]=fmincon(@objective,seed,[],[],[],[], ...
         max(seed-radius,-1),min(seed+radius,1),@constraints,options);
     c=constraints(value);
-    if flag>0 && all(c<=cfg.beamforming.solver.feasibilityTolerance) && score<=objective(seed)
+    exitflags(q-D)=flag;
+    if flag>0 && all(c<=settings.feasibilityTolerance) && score<=objective(seed)
         nodes(q,:)=value.';accepted=accepted+1;
+        acceptedMask(q-D)=true;
     end
 end
 A=uav.array.steeringUPA(nodes.',cfg.array.Nx,cfg.array.Ny,cfg.array.spacingOverLambda);
-d=struct('desiredCount',D,'acceptedCount',accepted,'usedTruth',false);
+d=struct('desiredCount',D,'acceptedCount',accepted,'usedTruth',false, ...
+    'exitflags',exitflags,'accepted',acceptedMask,'solver',settings);
     function [value,gradient]=objective(xi)
         a=exp(1i*phaseDerivative*xi);
         z=inverse*a;

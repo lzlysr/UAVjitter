@@ -7,6 +7,7 @@ paths=strings(2,3);
 fig=uav.plot.newFigure(cfg);ax=axes(fig,'Position',[.10,.25,.86,.65]);
 ji=find(r.jitterStdDeg==max(r.jitterStdDeg),1);
 methods=[1,2,3,4,5,22,23,24];
+if any(r.methodNames=="le_refined_covfit"),methods=[methods,25,26];end
 draw(ax,methods,ji);
 title(ax,sprintf('3×3 UPA，三轴姿态RMS=%g°；固定名义期望导向',r.jitterStdDeg(ji)));
 legend(ax,cellstr(r.methodLabels(methods)),'Location','southoutside','NumColumns',3,'FontSize',cfg.plot.fontSize);
@@ -21,6 +22,7 @@ paths(1,:)=publish(fig,"lin_yue_"+cfg.profile+"_comparison");
 
 fig=uav.plot.newFigure(cfg);layout=tiledlayout(fig,1,numel(r.jitterStdDeg));
 methods=[5,6,10,19,21,22,15];
+if any(r.methodNames=="le_refined_covfit"),methods=[methods,25,26];end
 for ji=1:numel(r.jitterStdDeg)
     ax=nexttile(layout);draw(ax,methods,ji);
     title(ax,sprintf('三轴姿态RMS=%g°',r.jitterStdDeg(ji)));
@@ -30,8 +32,8 @@ paths(2,:)=publish(fig,"lin_yue_"+cfg.profile+"_causal_ablation");
 
     function draw(ax,methods,ji)
         % 每条曲线使用不同标记；Oracle固定黑色虚线。所有坐标显式设置对数轴。
-        colors=lines(numel(methods));markers={'none','o','s','^','v','d','p','h','x'};
-        styles={'--','-','-.',':','-','--','-.',':','-'};
+        colors=lines(numel(methods));markers={'none','o','s','^','v','d','p','h','x','+'};
+        styles={'--','-','-.',':','-','--','-.',':','-','--'};
         hold(ax,'on');
         for index=1:numel(methods)
             color=colors(index,:);if methods(index)==1,color=[0,0,0];end

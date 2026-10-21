@@ -35,12 +35,14 @@ names=["oracle","dl","esp","wco_archived","current_covfit", ...
     "same_nnls0","yue_same_ls","lin_same_literal","lin_same_loaded_noise", ...
     "peak_ridge","peak_nnls0","yue_peak_ls","lin_peak_literal","lin_peak_loaded_noise", ...
     "oracle_incm_nominal","oracle_nodes_nnls0","oracle_nodes_ridge","oracle_noise_current", ...
-    "low_load_ridge","low_load_nnls0","low_peak_nnls0","refined_nnls0","yue_refined_ls","lin_refined_literal"];
+    "low_load_ridge","low_load_nnls0","low_peak_nnls0","refined_nnls0","yue_refined_ls","lin_refined_literal", ...
+    "le_refined_covfit","le_shared_candidates"];
 labels=["理想上界","DL","ESP","WCO（原图）","当前CovFit", ...
     "同候选NNLS零正则","Yue-LS同候选","Lin原式同候选","Lin加载补噪同候选", ...
     "局部峰＋原正则","局部峰＋零正则","Yue-LS局部峰","Lin原式局部峰","Lin加载补噪局部峰", ...
     "诊断：真实INCM＋名义导向","诊断：真候选零正则","诊断：真候选原正则","诊断：真实噪声", ...
-    "低加载＋原正则","低加载＋零正则","低加载局部峰","亚网格峰＋NNLS","Yue-LS细化候选","Lin原式细化候选"];
+    "低加载＋原正则","低加载＋零正则","低加载局部峰","本次局部细化CovFit","Yue-LS细化候选","Lin原式细化候选", ...
+    "Le完整细化CovFit（201网格）","Le细化器（共同候选）"];
 T=cfg.monteCarlo.nTrials;K=cfg.experiments.periodCounts.snapshotSweep;
 P=numel(points);J=numel(g.jitterStdDeg);Q=numel(names);
 shape=[T,K,P,J,Q];
@@ -61,6 +63,8 @@ for ji=1:J
     for ip=1:P
         pointCfg.timeline.L=points(ip);
         pointCfg=uav.config.validate(pointCfg);
+        leCfg=pointCfg;leCfg.spectrum.gridSize=g.leGridSize;
+        leCfg=uav.config.validate(leCfg);
         % 原图使用实验7、原扫描点序号；稀疏抽点不重编号，保证精确复放。
         originalPoint=indices(ip);
         seed=archived.seedScheme{originalPoint};seeds{ip,ji}=seed;
@@ -110,6 +114,9 @@ for ji=1:J
                                 raw.status(tr,k,ip,ji,mi)=1;continue;
                             case "current_covfit"
                                 Rh=originalR;
+                            case "le_refined_covfit"
+                                [Rh,leDiagnostic]=uav.incm.upaCovfitLe(safe,leCfg);
+                                pd.negativePowerCount=sum(leDiagnostic.fittedPowers<0);
                             case "oracle_incm_nominal"
                                 Rh=obs.truth.trueIncm;
                             otherwise
@@ -124,6 +131,8 @@ for ji=1:J
                                     dictionary=lowPeakA;desired=lowPeakDesired;
                                 elseif any(names(mi)==["refined_nnls0","yue_refined_ls","lin_refined_literal"])
                                     dictionary=refinedA;desired=refinement.desiredCount;
+                                elseif names(mi)=="le_shared_candidates"
+                                    [dictionary,desired]=uav.spectrum.leSharedCandidates(safe,lowD,lowCfg);
                                 elseif names(mi)=="oracle_noise_current"
                                     estimateNoise=cfg.signal.noisePower;
                                 end
@@ -201,8 +210,8 @@ summaryTable=vertcat(rows{:});
 fig=uav.plot.newFigure(cfg);layout=tiledlayout(fig,2,2);
 for panel=1:4
     ji=J;if mod(panel,2)==0,ji=1;end
-    methods=[1,2,3,4,5,7,8,23,24];
-    if panel>2,methods=[1,5,6,10,11,19,20,22,15];end
+    methods=[1,2,3,4,5,22,23,24,25,26];
+    if panel>2,methods=[1,5,6,10,11,19,20,22,25,26,15];end
     if g.jitterStdDeg(ji)==0,methods(methods==4)=[];end
     ax=nexttile(layout);hold(ax,'on');
     for mi=methods
@@ -211,7 +220,7 @@ for panel=1:4
     end
     grid(ax,'on');xlabel(ax,'每周期快拍数 L');ylabel(ax,'输出SINR中位数（dB）');
     title(ax,sprintf('三轴RMS=%g°',g.jitterStdDeg(ji)));
-    legend(ax,cellstr(labels(methods)),'Location','best','FontSize',9);
+    legend(ax,cellstr(labels(methods)),'Location','best','FontSize',cfg.plot.fontSize);
     set(ax,'FontSize',cfg.plot.fontSize);
 end
 result=struct('experimentName',"lin_yue_snapshot_study",'methodNames',names,'methodLabels',labels, ...

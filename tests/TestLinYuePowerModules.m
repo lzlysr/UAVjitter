@@ -8,6 +8,22 @@ classdef TestLinYuePowerModules < matlab.unittest.TestCase
         end
     end
     methods(Test)
+        function nonnegativeKktDetectsInvalidPower(testCase)
+            Rx=diag([2,3]);A=eye(2);
+            testCase.verifyLessThan(uav.incm.nonnegativeFitKkt(Rx,A,1,[1;2],0),1e-12);
+            testCase.verifyGreaterThan(uav.incm.nonnegativeFitKkt(Rx,A,1,[-1;2],0),0.1);
+        end
+        function leTransferPreservesNominalAndRejectsTruth(testCase)
+            cfg=config('smoke');reference=cfg.derived.nominalSteeringReference;
+            A=cfg.derived.nominalSteering;p=[10;1000;1000];
+            Rx=(A.*p.')*A'+eye(9);obs=struct('X',A,'Rx',Rx);
+            [R,d]=uav.incm.upaCovfitLe(obs,cfg);
+            testCase.verifyFalse(d.usedTruth);
+            testCase.verifyEqual(cfg.derived.nominalSteeringReference,reference);
+            testCase.verifyTrue(all(isfinite(R),'all'));
+            obs.truth=struct;
+            testCase.verifyError(@()uav.incm.upaCovfitLe(obs,cfg),'uav:incm:InvalidObservation');
+        end
         function exactCovarianceRecoversYuePowers(testCase)
             cfg=config('smoke');A=cfg.derived.nominalSteering;p=[10;1000;1000];
             Rx=(A.*p.')*A'+eye(9);
