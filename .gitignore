@@ -13,4 +13,4 @@ results/tables/*
 !results/tables/.gitkeep
 results/logs/*
 !results/logs/.gitkeep
-
+results/requested_exp06_exp07_*/

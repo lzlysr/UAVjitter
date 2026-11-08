@@ -15,7 +15,7 @@ end
 
 cfg = uav.config.validate(cfg);
 requiredMethods = ["oracle", "dl_mvdr", "esp", "wco", ...
-    "CovFit"];
+    "incm_covfit"];
 configuredMethods = reshape(cfg.experiments.classicJitterMethodNames, 1, []);
 if ~isequal(configuredMethods, requiredMethods)
     error('uav:experiment:ClassicParameterStudyMethodMismatch', ...
@@ -137,9 +137,9 @@ for methodIndex = 1:numel(methodNames)
     values = result.raw.sinrLinear(:, :, :, methodIndex);
     overallMedianSinrDb(methodIndex) = 10 * log10(quantile(values(:), 0.5));
 end
-incmIndex = methodNames == "CovFit";
+incmIndex = methodNames == "incm_covfit";
 otherPractical = methodNames ~= "oracle" & ...
-    methodNames ~= "CovFit";
+    methodNames ~= "incm_covfit";
 incmDominanceByMethod = false(1, numel(methodNames));
 for methodIndex = 1:numel(methodNames)
     incmDominanceByMethod(methodIndex) = all( ...

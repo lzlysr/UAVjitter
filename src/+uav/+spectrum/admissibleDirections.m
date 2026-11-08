@@ -17,6 +17,14 @@ end
 
 radialSquared = sum(real(nodes).^2, 2);
 visible = radialSquared <= 1;
+if isfield(cfg.derived,'arrayType') && cfg.derived.arrayType == "ULA"
+    % ULA只观测u_x。所有相同u_x的三维方向属于同一个响应等价类，
+    % 必须共同排除；不能借不可观测的u_y把期望能量重新归为干扰。
+    theta = asin(max(-1,min(1,real(nodes(:,1)))));
+    reference = asin(max(-1,min(1,cfg.derived.nominalDirectionCosines(1,1))));
+    mask = visible & abs(theta-reference) > deg2rad(uav.spectrum.desiredExclusionHalfWidth(cfg));
+    return;
+end
 % 当前场景信号来自阵列下半球，取负z分量恢复三维单位方向。
 z = -sqrt(max(0, 1 - radialSquared));
 directions = [real(nodes), z];

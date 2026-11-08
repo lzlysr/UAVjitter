@@ -10,6 +10,19 @@ if nargin < 2 || isempty(stream)
 end
 validateInputs(cfg, stream);
 calibration = cfg.beamforming.calibration;
+if isfield(cfg.derived,'arrayType') && cfg.derived.arrayType == "ULA"
+    % 用户授权采用研究分支已有的固定半径比例；不自动调小失败的经验分位数，
+    % 也不按L、抖动扫描点或当前数据选择半径。UPA继续执行下方原标定流程。
+    if ~isfield(calibration,'ulaSquaredRadiusScale')
+        error('uav:beamforming:MissingUlaRadius','ULA需要在config.m配置固定鲁棒半径比例。');
+    end
+    epsilonS=sqrt(calibration.ulaSquaredRadiusScale*cfg.derived.M);
+    diagnostics=struct('policy',"ULA固定平方半径比例", ...
+        'squaredRadiusScale',calibration.ulaSquaredRadiusScale, ...
+        'referenceNorm',norm(cfg.derived.nominalSteeringReference), ...
+        'mismatchNorms',zeros(0,1),'usedTruth',false);
+    return;
+end
 sampleCount = calibration.sampleCount;
 % 三轴设计标准差只用于鲁棒半径标定，不会覆盖实际实验抖动参数。
 designStdRad = deg2rad(reshape(calibration.designJitterStdDeg, 3, 1));

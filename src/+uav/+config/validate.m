@@ -15,11 +15,10 @@ for index = 1:numel(requiredSections)
 end
 
 % 旧方法标识兼容：只改名称，不改历史配置的物理参数；同义重复仍拒绝。
-for field={"classicJitterMethodNames","classicSnapshotMethodNames"}
+for field={"methodNames","exp02MethodNames","classicJitterMethodNames","classicSnapshotMethodNames"}
     name=field{1};
     if isfield(cfg.experiments,name) && isstring(cfg.experiments.(name))
-        names=cfg.experiments.(name);names(names=="static_incm_mvdr")="CovFit";
-        cfg.experiments.(name)=names;
+        cfg.experiments.(name)=uav.config.canonicalMethodNames(cfg.experiments.(name));
     end
 end
 % 第一组：阵列、时间、姿态、随机和网格的基本尺寸与范围检查。
@@ -98,6 +97,12 @@ worldUnitVectors = azElToUnitVectors(azElDeg);
 nominalRotation = rotationZYX(deg2rad(cfg.attitude.nominalDeg));
 nominalArrayUnitVectors = nominalRotation.' * worldUnitVectors;
 directionCosines = nominalArrayUnitVectors(1:2, :);
+% 仅新增沿x轴的一维模式；不改变既有UPA及其他历史尺寸的处理路径。
+isUla = cfg.array.Nx > 1 && cfg.array.Ny == 1;
+arrayType = "UPA"; spatialDimension = 2;
+if isUla
+    arrayType = "ULA"; spatialDimension = 1;
+end
 nominalSteering = steeringReference(directionCosines, cfg.array.Nx, cfg.array.Ny, ...
     cfg.array.spacingOverLambda);
 [gridAxis, xiX, xiY, visibleMask, visibleLinearIndices, ...
@@ -125,6 +130,8 @@ cfg.output = struct( ...
     'overwrite', cfg.output.overwrite);
 % 派生量只由上面的已校验原始参数计算，不允许算法反向修改。
 cfg.derived = struct( ...
+    'arrayType', arrayType, ...
+    'spatialDimension', spatialDimension, ...
     'M', cfg.array.Nx * cfg.array.Ny, ...
     'J', J, ...
     'noisePower', noisePower, ...
@@ -146,21 +153,59 @@ cfg.derived = struct( ...
         'directionCosines', gridDirectionCosines, ...
         'manifold', gridManifold, ...
         'cellArea', gridCellArea));
+% 老字段cellArea保留兼容，但ULA中表示角度单元长度，不是二维面积。
+grid = cfg.derived.spectrumGrid;
+grid.dimension = spatialDimension;
+grid.weights = gridCellArea * ones(numel(grid.visibleLinearIndices), 1);
+if isUla
+    grid.coordinate = "theta=asin(u_x)";
+    grid.measure = "dtheta";
+    grid.thetaRad = grid.axis;
+    grid.step = pi / cfg.spectrum.gridSize;
+else
+    grid.coordinate = "[xi_x,xi_y]";
+    grid.measure = "dxi_x_dxi_y";
+    grid.thetaRad = [];
+    grid.step = 2 / (cfg.spectrum.gridSize - 1);
+end
+cfg.derived.spectrumGrid = grid;
+cfg.derived.desiredExclusionHalfWidthDeg = uav.spectrum.desiredExclusionHalfWidth(cfg);
+if isUla
+    % 仅配置诊断：记录名义干扰与期望区的投影重叠，不参与算法选峰。
+    sourceAngles = asin(max(-1, min(1, directionCosines(1, :))));
+    cfg.derived.ulaGeometry = struct('nominalAnglesRad', sourceAngles, ...
+        'interferersInsideDesiredSector', ...
+        abs(sourceAngles(2:end)-sourceAngles(1)) <= deg2rad(cfg.derived.desiredExclusionHalfWidthDeg));
+end
 end
 
 function [axisValues, xiX, xiY, visibleMask, visibleIndices, ...
         directionCosines, manifold, cellArea] = spectrumGrid(cfg)
-%SPECTRUMGRID 预计算二维方向余弦网格和所有可见节点的UPA流形。
+%SPECTRUMGRID 预计算UPA二维网格或x轴ULA一维角网格及对应流形。
 % 缓存M×Nvisible流形可避免每个周期、每种方法重复生成相同导向矢量。
-axisValues = linspace(-1, 1, cfg.spectrum.gridSize);
-[xiX, xiY] = meshgrid(axisValues, axisValues);
-visibleMask = xiX.^2 + xiY.^2 <= 1;
+if cfg.array.Nx > 1 && cfg.array.Ny == 1
+    % 中点角网格避开端点；sin(theta)直接匹配x轴ULA的相位投影。
+    step = pi / cfg.spectrum.gridSize;
+    axisValues = -pi/2 + step/2 + step*(0:cfg.spectrum.gridSize-1);
+    xiX = sin(axisValues); xiY = zeros(size(xiX));
+    visibleMask = true(size(xiX));
+else
+    axisValues = linspace(-1, 1, cfg.spectrum.gridSize);
+    [xiX, xiY] = meshgrid(axisValues, axisValues);
+    visibleMask = xiX.^2 + xiY.^2 <= 1;
+end
 visibleIndices = find(visibleMask);
-directionCosines = [xiX(visibleIndices).'; xiY(visibleIndices).'];
+visibleIndices = visibleIndices(:);
+% MATLAB对行向量索引会保持行形状，不能依赖二维矩阵时的隐式列形状。
+directionCosines = [reshape(xiX(visibleIndices),1,[]);reshape(xiY(visibleIndices),1,[])];
 manifold = steeringReference(directionCosines, cfg.array.Nx, cfg.array.Ny, ...
     cfg.array.spacingOverLambda);
 gridStep = axisValues(2) - axisValues(1);
-cellArea = gridStep^2;
+if cfg.array.Nx > 1 && cfg.array.Ny == 1
+    cellArea = pi / cfg.spectrum.gridSize;
+else
+    cellArea = gridStep^2;
+end
 end
 
 function pathValue = configuredOutputPath(output, field, defaultValue)
@@ -202,6 +247,13 @@ end
 end
 
 function validateAlgorithmParameters(cfg)
+if isfield(cfg.spectrum,'ulaDesiredExclusionHalfWidthDeg')
+    validateAlgorithmFiniteScalar(cfg.spectrum.ulaDesiredExclusionHalfWidthDeg, ...
+        'spectrum.ulaDesiredExclusionHalfWidthDeg');
+    if cfg.spectrum.ulaDesiredExclusionHalfWidthDeg<0 || cfg.spectrum.ulaDesiredExclusionHalfWidthDeg>=90
+        error('uav:config:InvalidAlgorithmParameter','ULA期望排除半宽必须位于[0,90)度。');
+    end
+end
 validateAlgorithmFiniteScalar(cfg.spectrum.desiredExclusionHalfWidthDeg, ...
     'spectrum.desiredExclusionHalfWidthDeg');
 if cfg.spectrum.desiredExclusionHalfWidthDeg < 0 || ...
@@ -350,6 +402,13 @@ validateAlgorithmIntegerScalar(cfg.beamforming.solver.maxIterations, ...
     'beamforming.solver.maxIterations', true);
 validateFiniteVector(cfg.beamforming.calibration.designJitterStdDeg, 3, ...
     'beamforming.calibration.designJitterStdDeg');
+if isfield(cfg.beamforming.calibration,'ulaSquaredRadiusScale')
+    validateUnitIntervalScalar(cfg.beamforming.calibration.ulaSquaredRadiusScale, ...
+        'beamforming.calibration.ulaSquaredRadiusScale',false);
+    if cfg.beamforming.calibration.ulaSquaredRadiusScale >= 1
+        error('uav:config:InvalidAlgorithmParameter','ULA半径平方比例必须严格小于1。');
+    end
+end
 if any(cfg.beamforming.calibration.designJitterStdDeg < 0)
     error('uav:config:InvalidAlgorithmParameter', ...
         'beamforming.calibration.designJitterStdDeg must be nonnegative.');
@@ -403,11 +462,11 @@ validateAlgorithmIntegerScalar(classic.esp.signalSubspaceDimension, ...
 end
 
 function validateExperimentParameters(cfg)
-expectedMethods = ["oracle", "frozen", "scm", "dl", "static", "temporal"];
+expectedMethods = ["oracle", "frozen", "scm", "dl", "incm_integral_processed", "temporal"];
 allowedExp02Methods = expectedMethods;
 allowedClassicMethods = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", ...
     "nlms", "rls", "pi", "dl_mvdr", "esp", "wco", ...
-    "CovFit", "CovFit_local", "static"];
+    "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin"];
 expectedAblations = ["full", "lambda_t_zero", "identity_alignment", ...
     "uniform_quadrature", "no_structure", "pilot_projection"];
 if ~isstring(cfg.experiments.methodNames) || ...
@@ -433,9 +492,9 @@ if ~isstring(cfg.experiments.classicJitterMethodNames) || ...
         'unique subset of the supported classic methods.']);
 end
 validateClassicTuning(cfg.experiments.classicTuning);
-if any([classicMethods,reshape(cfg.experiments.classicSnapshotMethodNames,1,[])]=="CovFit_local") && ...
+if any([classicMethods,reshape(cfg.experiments.classicSnapshotMethodNames,1,[])]=="incm_covfit_refined") && ...
         ~isfield(cfg.incm,'localCovfit')
-    experimentError('选择CovFit_local时必须提供incm.localCovfit配置。');
+    experimentError('选择incm_covfit_refined时必须提供incm.localCovfit配置。');
 end
 snapshotMethods = reshape(cfg.experiments.classicSnapshotMethodNames, 1, []);
 if ~isstring(cfg.experiments.classicSnapshotMethodNames) || ...

@@ -11,11 +11,12 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
     methods(Test)
         function renamedMethodsAndLegacyAlias(testCase)
             cfg=config('smoke');
-            testCase.verifyTrue(all(ismember(["CovFit","CovFit_local"],cfg.experiments.classicJitterMethodNames)));
-            cfg.experiments.classicSnapshotMethodNames=["static_incm_mvdr","CovFit_local"];
+            % 默认组合沿用用户选择的处理后积分与细化拟合，不强制加入普通拟合。
+            testCase.verifyTrue(all(ismember(["incm_integral_processed","incm_covfit_refined"],cfg.experiments.classicJitterMethodNames)));
+            cfg.experiments.classicSnapshotMethodNames=["static_incm_mvdr","incm_covfit_refined"];
             cfg=uav.config.validate(cfg);
-            testCase.verifyEqual(cfg.experiments.classicSnapshotMethodNames,["CovFit","CovFit_local"]);
-            cfg.experiments.classicSnapshotMethodNames=["CovFit","static_incm_mvdr"];
+            testCase.verifyEqual(cfg.experiments.classicSnapshotMethodNames,["incm_covfit","incm_covfit_refined"]);
+            cfg.experiments.classicSnapshotMethodNames=["incm_covfit","static_incm_mvdr"];
             testCase.verifyError(@()uav.config.validate(cfg),'uav:config:InvalidExperimentParameter');
         end
         function newConfigurationRejectsInvalidRadius(testCase)
@@ -46,7 +47,7 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
                 for k=1:2
                     obs=uav.scenario.generatePeriod(cfg,scene,k, ...
                         uav.util.makeStream(cfg.random.baseSeed,seed.snapshotSubstreams(1,k)));
-                    record=uav.experiment.runClassicMethods(obs,[],cfg,["CovFit","CovFit_local"]);
+                    record=uav.experiment.runClassicMethods(obs,[],cfg,["incm_covfit","incm_covfit_refined"]);
                     testCase.verifyEqual(record.sinrLinear,expected(k,:),'RelTol',1e-10);
                     testCase.verifyEqual(record.diagnostics{2}.beamforming.method,"mvdr");
                     testCase.verifyFalse(record.diagnostics{2}.reconstruction.usedTruth);
@@ -73,7 +74,7 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
             cfg.experiments.periodCounts.jitterSweep=2;cfg.experiments.periodCounts.snapshotSweep=2;
             cfg.experiments.jitterSweepDeg=[0,5];cfg.experiments.snapshotSweep=[8,32];
             cfg.experiments.bootstrapReplicates=10;
-            cfg.experiments.classicJitterMethodNames=["oracle","CovFit","CovFit_local"];
+            cfg.experiments.classicJitterMethodNames=["oracle","incm_covfit","incm_covfit_refined"];
             cfg.experiments.classicSnapshotMethodNames=cfg.experiments.classicJitterMethodNames;
             cfg.plot.visible=false;cfg.plot.closeAfterExport=true;
             for item={'raw','figure','table','log'}
@@ -85,7 +86,7 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
             a=exp06_classic_method_jitter_sweep(cfg);b=exp07_classic_method_snapshot_sweep(cfg);
             for result={a,b}
                 r=result{1};testCase.verifyEqual(r.status,"complete");
-                testCase.verifyEqual(r.methodNames,["oracle","CovFit","CovFit_local"]);
+                testCase.verifyEqual(r.methodNames,["oracle","incm_covfit","incm_covfit_refined"]);
                 testCase.verifyTrue(all(isfinite(r.raw.sinrLinear),'all'));
                 testCase.verifyTrue(isfile(r.artifacts.fig));testCase.verifyTrue(isfile(r.artifacts.mat));
                 testCase.verifyEqual(r.raw.snapshotSignatures(:,:,:,1,:),r.raw.snapshotSignatures(:,:,:,3,:));

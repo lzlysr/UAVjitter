@@ -4,7 +4,7 @@ function result = runClassicSweep(cfg, scanKind)
 %   每个扫描点内全部方法共享观测，不自动加入run_all。
 
 experimentTimer = tic;
-[cfg, calibration] = uav.experiment.prepare(cfg);
+cfg = uav.config.validate(cfg);
 switch string(scanKind)
     case "jitter"
         experimentIndex = 6;
@@ -25,7 +25,22 @@ switch string(scanKind)
     otherwise
         error('uav:experiment:InvalidClassicScan', '扫描类型必须为jitter或snapshots。');
 end
+if cfg.derived.arrayType == "ULA" && ~any(methodNames=="wco")
+    % 经典INCM都接标准MVDR；未选择WCO时不应被其不可行半径阻断。
+    % 不改变配置半径；若选择WCO，则由统一标定入口使用显式ULA半径配置。
+    calibration=struct('epsilonS',cfg.beamforming.epsilonS, ...
+        'scope',"未选择WCO，标准MVDR对照不需要鲁棒半径标定");
+else
+    [cfg, calibration] = uav.experiment.prepare(cfg);
+end
 methodLabels = classicMethodLabels(methodNames);
+if cfg.derived.arrayType == "ULA"
+    overlap=cfg.derived.ulaGeometry.interferersInsideDesiredSector;
+    if any(overlap)
+        warning('uav:experiment:UlaSectorOverlap', ...
+            'ULA名义干扰%s落入期望排除区；保留main参数，不自动改变分区或源方向。',mat2str(find(overlap)));
+    end
+end
 pointCount = numel(scanPoints);
 trialCount = cfg.monteCarlo.nTrials;
 methodCount = numel(methodNames);
@@ -57,6 +72,16 @@ leakageSummary = uav.experiment.summarizeFinitePoints( ...
     raw.interferenceLeakage, cfg);
 summaryTable = classicSweepTable(scanPoints, methodNames, ...
     sinrSummary, gainSummary, leakageSummary, pointVariable);
+summaryTable.validCount = sinrSummary.validCounts(:);
+summaryTable.notApplicableCount = reshape(sum(sum(raw.methodStatus=="not-applicable",1),2),[],1);
+reasons = strings(pointCount,methodCount);
+for p=1:pointCount
+    for m=1:methodCount
+        entries=unique(reshape(raw.notApplicableReason(:,:,p,m),[],1));
+        reasons(p,m)=strjoin(entries(strlength(entries)>0),"；");
+    end
+end
+summaryTable.notApplicableReason = reasons(:);
 
 fig = uav.plot.newFigure(cfg);
 layout = tiledlayout(fig, 'flow');
@@ -81,7 +106,7 @@ set(gca, 'FontSize', cfg.plot.fontSize, 'LineWidth', cfg.plot.lineWidth-1);
 box on;
 % 不固定纵轴范围，避免较差方法被裁掉而掩盖实际性能。
 legend(cellstr(methodLabels), 'Location', 'bestoutside', ...
-    'FontSize', cfg.plot.fontSize);
+    'FontSize', cfg.plot.fontSize, 'Interpreter','none');
 
 result = struct( ...
     'experimentName', experimentName, ...
@@ -112,6 +137,8 @@ for index = 1:numel(fields)
 end
 raw.desiredSteeringMismatchNormalized = zeros(trials, periods, points);
 raw.snapshotSignatures = zeros(trials, periods, points, methods, 4);
+raw.methodStatus = strings(trials,periods,points,methods);
+raw.notApplicableReason = strings(trials,periods,points,methods);
 end
 
 function raw = assignPoint(raw, pointRaw, pointIndex)
@@ -123,16 +150,18 @@ end
 raw.desiredSteeringMismatchNormalized(:, :, pointIndex) = ...
     pointRaw.desiredSteeringMismatchNormalized;
 raw.snapshotSignatures(:, :, pointIndex, :, :) = pointRaw.snapshotSignatures;
+raw.methodStatus(:,:,pointIndex,:) = pointRaw.methodStatus;
+raw.notApplicableReason(:,:,pointIndex,:) = pointRaw.notApplicableReason;
 end
 
 function [lineStyle, marker] = classicMethodStyle(name)
 %CLASSICMETHODSTYLE 为每种经典方法返回固定且互不重复的绘图样式。
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "CovFit", "static", "CovFit_local"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_integral_processed", "incm_covfit_refined", "incm_integral_origin"];
 lineStyles = ["--", "-", "--", "-.", "-.", "-", "--", "-.", ...
-    ":", "-", "--", "-.", ":"];
+    ":", "-", "--", "-.", ":", "--"];
 markers = ["none", "o", "s", "^", "v", "d", "x", "+", "p", ...
-    "h", "*", "s", ">"];
+    "h", "*", "s", ">", "<"];
 [found, location] = ismember(string(name), catalogNames);
 if ~found
     error('uav:experiment:InvalidClassicMethodSelection', ...
@@ -144,10 +173,10 @@ end
 
 function labels = classicMethodLabels(names)
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "CovFit", "static", "CovFit_local"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_integral_processed", "incm_covfit_refined", "incm_integral_origin"];
 catalogLabels = ["理想上界", "NSB", "冻结初始MVDR", "MVDR", ...
     "NLMS", "RLS", "PI", "DL", "ESP", "WCO", ...
-    "CovFit", "积分INCM（static）", "CovFit＋局部细化"];
+    "incm_covfit", "incm_integral_processed", "incm_covfit_refined", "incm_integral_origin"];
 [found, locations] = ismember(names, catalogNames);
 if ~all(found)
     error('uav:experiment:InvalidClassicMethodSelection', ...

@@ -14,6 +14,46 @@
 
 ## 2. 快速开始
 
+### 自动切换ULA与UPA
+
+`Nx>1、Ny=1`自动使用沿x轴的`ULA`：三维姿态模型不变，但谱搜索、
+期望区排除、局部细化和积分自动切换为一维。`Nx、Ny`均大于1时保持UPA。
+本次未扩展沿y轴ULA或单阵元算法模式；不要通过`Nx=1`启用此功能。
+
+```matlab
+startup
+cfg = config("smoke");
+cfg.array.Nx = 9;
+cfg.array.Ny = 1;
+methods = ["oracle", "dl_mvdr", "esp", "wco", ...
+    "incm_integral_origin", "incm_integral_processed", "incm_covfit", "incm_covfit_refined"];
+cfg.experiments.classicJitterMethodNames = methods;
+cfg.experiments.classicSnapshotMethodNames = methods;
+cfg = uav.config.validate(cfg);
+r6 = exp06_classic_method_jitter_sweep(cfg);
+r7 = exp07_classic_method_snapshot_sweep(cfg);
+```
+
+ULA使用`theta=asin(u_x)`等角中点网格，点数仍读`cfg.spectrum.gridSize`，
+积分采用`dtheta`，不再在二维圆盘上重复积分。ULA结果名自动增加`_ULA_9x1`，
+不会覆盖原UPA图。`incm_integral_origin`为独立可选原式Rec，不替换积分`incm_integral_processed`；
+秩亏SCM下记录“不适用”和NaN，CSV同时保存有效样本数与原因。
+
+ULA的球形鲁棒半径为`sqrt(cfg.beamforming.calibration.ulaSquaredRadiusScale*M)`，
+比例默认0.3；这是用户授权的ULA专用设置，不随数据或SINR调参。UPA仍用原分位数标定。
+
+排除区已独立配置：UPA使用`cfg.spectrum.desiredExclusionHalfWidthDeg=25`，
+ULA使用`cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=5`。当前名义几何下，
+两个干扰都在ULA的5°排除区之外；若改回25°，两者都会被排除。
+5°只是初始分区，不保证覆盖当前5° RMS的动态抖动。请先查看
+`cfg.derived.ulaGeometry`；它只作配置诊断，不向算法提供真实源身份。
+详细约定、文件职责和验证方法见[ULA自动降维说明](docs/automatic_ula.md)。
+
+四种INCM方法的当前名称为`incm_integral_origin`、`incm_integral_processed`、
+`incm_covfit`、`incm_covfit_refined`。历史名称分别为`gu_leshem2012_rec`、
+`static`、`CovFit`、`CovFit_local`，仍可作为输入；结果统一保存新名称。
+历史`static_incm_mvdr`也映射为`incm_covfit`。同义新旧名同时选择会被拒绝。
+
 运行某个实验：
 ```matlab
 cd('D:\workspace\UAVjitter')
@@ -166,13 +206,13 @@ SINR、期望方向增益和干扰泄漏，统计中位数、低分位数及配�
 RMS为横轴输出中位数及5%/95%试次分位范围。
 
 实验2的方法组合由 `cfg.experiments.exp02MethodNames` 单独控制，可从
-`oracle`、`frozen`、`scm`、`dl`、`static` 和 `temporal` 中选择任意
+`oracle`、`frozen`、`scm`、`dl`、`incm_integral_processed` 和 `temporal` 中选择任意
 非空且不重复的子集，并保持配置顺序。例如：
 
 ```matlab
 cfg = config("preliminary");
 cfg.experiments.exp02MethodNames = ...
-    ["oracle", "frozen", "scm", "static"];
+    ["oracle", "frozen", "scm", "incm_integral_processed"];
 cfg = uav.config.validate(cfg);
 result = exp02_jitter_sweep(cfg);
 ```
@@ -226,8 +266,8 @@ result = exp02_jitter_sweep(cfg);
 ### 8.6 `+incm`：INCM重构
 
 - `reconstruct.m`：静态和时序INCM的统一入口。静态方法使用当前周期Capon谱和均匀求积；时序方法依次进行谱对齐、非负时序稀疏增强、峰值选择、自适应求积和结构投影。该文件还负责噪声功率估计、期望区排除和可选训练序列投影。
-- `upaCovfit.m`：经典实验中的 `CovFit` 实际重构核心。它从加载Capon谱提取少量期望/干扰候选，用非负协方差拟合估计候选功率，随后删除期望候选项并形成干扰加噪声协方差；不读取真实方向、真实干扰数或真实INCM。
-- `localCovfit.m`：实验6/7中`CovFit_local`的重构核心；采用低加载、局部干扰峰、2格有界连续细化和零正则NNLS，期望拟合字典及最终名义参考不细化，另检查功率解KKT。
+- `upaCovfit.m`：经典实验中的 `incm_covfit` 实际重构核心。它从加载Capon谱提取少量期望/干扰候选，用非负协方差拟合估计候选功率，随后删除期望候选项并形成干扰加噪声协方差；不读取真实方向、真实干扰数或真实INCM。
+- `localCovfit.m`：实验6/7中`incm_covfit_refined`的重构核心；采用低加载、局部干扰峰、2格有界连续细化和零正则NNLS，期望拟合字典及最终名义参考不细化，另检查功率解KKT。
 - `fitNonnegativePowers.m`：把Hermitian协方差映射到保持Frobenius范数的实向量空间，并以带L2正则项的非负最小二乘估计候选空间功率。
 - `temporalProx.m`：求解非负逐元素时序稀疏目标。利用目标函数的分段凸结构枚举精确候选点，不依赖CVX。
 - `projectStructure.m`：对原始INCM依次执行Hermitian化、半正定投影、特征值下限和可配置收缩，保证输出有限、Hermitian且半正定。
@@ -337,11 +377,12 @@ result = exp02_jitter_sweep(cfg);
 
 ## 10.1 独立经典方法退化实验
 
-经典方法实验支持以下11种方法标识：
+经典方法实验支持以下14种方法标识：
 
 ```matlab
 ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", "rls", ...
- "pi", "dl_mvdr", "esp", "wco", "static", "CovFit", "CovFit_local"]
+ "pi", "dl_mvdr", "esp", "wco", "incm_integral_origin", ...
+ "incm_integral_processed", "incm_covfit", "incm_covfit_refined"]
 ```
 
 可以在调用前自由选择任意非空且不重复的组合，程序保持用户给出的顺序：
@@ -350,15 +391,15 @@ result = exp02_jitter_sweep(cfg);
 cfg = config("smoke");
 cfg.experiments.classicJitterMethodNames = ...
     ["oracle", "nsb", "scm_mvdr", "dl_mvdr", "wco", ...
-     "CovFit"];
+     "incm_covfit"];
 cfg = uav.config.validate(cfg);
 result = exp06_classic_method_jitter_sweep(cfg);
 ```
 
 NSB使用配置中的标称期望和干扰方向；NLMS与RLS使用已知期望QPSK训练
 序列；PI固定配置参考阵元；ESP使用配置的信号子空间维数；WCO采用离线
-固定的球形导向不确定集且不附加 `gamma` 正则项；`CovFit`
-原名`static_incm_mvdr`，2026-10-21统一改名，旧名仍兼容。其内部重构自2026-08-30起已由“期望区外稠密Capon
+固定的球形导向不确定集且不附加 `gamma` 正则项；`incm_covfit`
+历史名称为`static_incm_mvdr`和`CovFit`，现统一为`incm_covfit`，旧名仍兼容。其内部重构自2026-08-30起已由“期望区外稠密Capon
 均匀积分”替换为“UPA候选提取、非负协方差拟合、删除期望候选项”，最终
 仍接标准MVDR，因此不会把鲁棒权值收益混入INCM重构收益。CovFit专用参数
 集中在 `cfg.incm.staticCovfit`。除Oracle外，所有方法均不能读取真实姿态、真实方向
@@ -367,9 +408,9 @@ NSB使用配置中的标称期望和干扰方向；NLMS与RLS使用已知期望Q
 ## 10.2 经典方法参数筛选与锁定验证
 
 `runClassicJitterParameterStudy.m`原先在同一批配对观测上筛选DL-MVDR、
-ESP、WCO和旧静态Capon积分INCM参数。由于 `CovFit` 的重构核心
+ESP、WCO和旧静态Capon积分INCM参数。由于 `incm_covfit` 的重构核心
 已替换，旧筛选结果及旧静态INCM的谱加载/收缩参数不再代表当前方法；在
-重新设计CovFit参数筛选协议前，不应使用该脚本为当前 `CovFit`
+重新设计CovFit参数筛选协议前，不应使用该脚本为当前 `incm_covfit`
 给出参数最优性结论。DL、ESP和WCO的历史筛选逻辑不受方法替换影响。
 
 推荐按“smoke筛选、preliminary锁定验证”的顺序运行：
@@ -400,8 +441,8 @@ WCO候选若使离线标定半径达到或超过参考导向矢量范数，将�
 
 ## 10.3 汇报用的两种INCM路线对照
 
-实验6默认组合现为Oracle、DL、ESP、WCO、原有`static`、`CovFit`和
-`CovFit_local`（CovFit＋局部细化）。实验7使用相同默认组合扫描快拍数：
+实验6默认组合现为Oracle、DL、ESP、WCO、`incm_integral_processed`和
+`incm_covfit_refined`（CovFit＋局部细化）。实验7使用相同默认组合扫描快拍数：
 
 ```matlab
 startup;
@@ -413,13 +454,13 @@ snapshotResult = exp07_classic_method_snapshot_sweep(cfg);
 两图的方法分别在`config.m`的`classicJitterMethodNames`和
 `classicSnapshotMethodNames`中选取。实验6固定`timeline.L=32`，扫描
 `jitterSweepDeg=0:1:20`；实验7固定`attitude.stdDeg=[5,5,5]`，扫描
-`snapshotSweep=8:100:512`（实际为8、108、208、308、408、508）。可在同一配置入口自行调整。
+`snapshotSweep=32:32:1024`。可在同一配置入口自行调整。
 
-新增的经典`static`直接复用原积分重构器，再接与CovFit相同的标准MVDR。
-原主线实验中的`static`仍接原鲁棒权值接口，未改变。两张新图不包含原始
-Gu–Leshem Rec，不能把工程static当作该原论文的完整复现。
+新增的经典`incm_integral_processed`直接复用原积分重构器，再接与CovFit相同的标准MVDR。
+原主线实验中的`incm_integral_processed`仍接原鲁棒权值接口，未改变。两张图默认不包含原式Rec，
+可显式加入`incm_integral_origin`；不能把处理后积分方法当作原论文Rec的完整复现。
 
-图例区分“积分INCM（static）”、“CovFit”和“CovFit＋局部细化”；输出在`results/figures`
+图例使用四种`incm_*`新标识（下划线按原文显示）；输出在`results/figures`
 下的`exp06_classic_method_jitter_sweep_<profile>`与
 `exp07_classic_method_snapshot_sweep_<profile>`，均有FIG/PDF/PNG，另存
 完整MAT、CSV和日志。相同profile重跑会覆盖工程内同名结果。
@@ -429,7 +470,7 @@ Gu–Leshem Rec，不能把工程static当作该原论文的完整复现。
 
 局部细化版使用独立参数`cfg.incm.localCovfit`，原CovFit继续使用
 `cfg.incm.staticCovfit`，二者不会互相覆盖。方法标识区分大小写。
-两种CovFit都固定相同名义期望导向、接标准MVDR，`static`与`temporal`不改。
+两种CovFit都固定相同名义期望导向、接标准MVDR，`incm_integral_processed`与`temporal`不改。
 移植来源、参数、历史别名、小规模一致性结果见
 [局部细化主线接入记录](docs/covfit_local_main_integration_2026-10-21.md)。
 

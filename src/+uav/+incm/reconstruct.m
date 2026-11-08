@@ -1,6 +1,6 @@
 function [RinHat, nextState, diagnostics] = reconstruct(method, obs, priorState, cfg)
 %RECONSTRUCT 静态及时序INCM重构的统一入口。
-%   method     - "static"或"temporal"；
+%   method     - 四种incm_*名称或temporal；历史名称由统一映射兼容；
 %   obs        - 非Oracle白名单观测，至少含M×M样本协方差Rx；
 %   priorState - 上一周期的估计谱与对齐诊断，静态方法可传[]；
 %   RinHat     - M×M重构干扰加噪声协方差；
@@ -9,17 +9,38 @@ function [RinHat, nextState, diagnostics] = reconstruct(method, obs, priorState,
 %
 %   本文件不访问真实方向、真实INCM或真实干扰数J。
 
-method = lower(string(method));
+method = lower(uav.config.canonicalMethodNames(method));
 validateInputs(obs, cfg);
 switch method
-    case "static"
+    case "incm_integral_processed"
         [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg);
     case "temporal"
         [RinHat, nextState, diagnostics] = reconstructTemporal(obs, priorState, cfg);
+    case {"incm_covfit","incm_covfit_refined"}
+        if method=="incm_covfit"
+            [RinHat,diagnostics]=uav.incm.upaCovfit(obs,cfg);
+        else
+            [RinHat,diagnostics]=uav.incm.localCovfit(obs,cfg);
+        end
+        nextState=struct('method',method);
+    case "incm_integral_origin"
+        % 原论文ULA采用dtheta；UPA是同一原式在现有二维测度下的迁移，
+        % 不是论文原始阵列实验。禁止加载、扣底、显式加噪声或结构修复。
+        grid = cfg.derived.spectrumGrid;
+        nodes = grid.directionCosines.';
+        keep = uav.spectrum.admissibleDirections(nodes,cfg);
+        [RinHat,diagnostics] = uav.incm.guLeshem2012Rec( ...
+            obs.Rx,grid.manifold(:,keep),grid.weights(keep));
+        diagnostics.measure = grid.measure;
+        diagnostics.arrayType = cfg.derived.arrayType;
+        diagnostics.usedTruth = false;
+        nextState = struct('method',"incm_integral_origin");
     otherwise
         error('uav:incm:UnsupportedMethod', ...
-            'Supported INCM reconstruction methods are "static" and "temporal".');
+            '支持四种incm_*方法及temporal重构。');
 end
+diagnostics.method=method;
+diagnostics.desiredExclusionHalfWidthDeg=uav.spectrum.desiredExclusionHalfWidth(cfg);
 end
 
 function [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg)
@@ -29,7 +50,7 @@ quadrature = uniformQuadrature(prepared.residualPowerMap, ...
     prepared.spectrum, prepared.includedMask);
 rawIncm = reconstructFromQuadrature(quadrature, prepared.noiseEstimate, cfg);
 [RinHat, structureDiagnostics] = uav.incm.projectStructure(rawIncm, cfg, true);
-nextState = struct('method', "static");
+nextState = struct('method', "incm_integral_processed");
 diagnostics = commonOutputDiagnostics(prepared, commonDiagnostics, ...
     structureDiagnostics);
 diagnostics.usedPowerMap = prepared.residualPowerMap;
@@ -194,14 +215,14 @@ diagnostics = struct( ...
 end
 
 function quadrature = uniformQuadrature(powerMap, spectrumDiagnostics, includedMask)
-% 每个允许网格单元使用相同面积权重，作为静态基线和求积消融。
+% 使用网格单元权重：UPA是方向余弦面积，ULA是弧度长度dtheta。
 linearIndices = find(includedMask);
 quadrature = struct( ...
-    'nodes', [spectrumDiagnostics.xiX(linearIndices), ...
-        spectrumDiagnostics.xiY(linearIndices)], ...
+    'nodes', [reshape(spectrumDiagnostics.xiX(linearIndices),[],1), ...
+        reshape(spectrumDiagnostics.xiY(linearIndices),[],1)], ...
     'linearIndices', linearIndices, ...
     'weights', spectrumDiagnostics.cellArea * ones(numel(linearIndices), 1), ...
-    'values', powerMap(linearIndices), ...
+    'values', reshape(powerMap(linearIndices),[],1), ...
     'diagnostics', struct( ...
         'mode', "uniform", ...
         'fineCellCount', 0, ...

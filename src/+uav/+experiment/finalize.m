@@ -4,6 +4,10 @@ function result = finalize(result, summaryTable, fig, cfg, actualCounts, timerVa
 %   是否关闭。单实验默认保留，run_all批处理会把该开关设为true。
 
 runtimeSec = toc(timerValue);
+% 所有实验的ULA产物携带阵列形状；UPA保留历史文件名不变。
+if cfg.derived.arrayType == "ULA"
+    result.experimentName = result.experimentName + "_ULA_" + cfg.array.Nx + "x1";
+end
 try
     % 保存的是实验实际使用的完整cfg，其中包含固定标定后的epsilonS。
     result.cfg = cfg;

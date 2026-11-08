@@ -15,11 +15,11 @@ classdef TestClassicIncmSweeps < matlab.unittest.TestCase
             obs = uav.scenario.generatePeriod(cfg, scene, 1, ...
                 uav.util.makeStream(cfg.random.baseSeed, 2));
             safe = uav.experiment.algorithmObservation(obs);
-            [matrix, ~] = uav.incm.reconstruct("static", safe, [], cfg);
+            [matrix, ~] = uav.incm.reconstruct("incm_integral_processed", safe, [], cfg);
             expected = uav.beamforming.solve("mvdr", matrix, ...
                 cfg.derived.nominalSteeringReference, cfg);
             record = uav.experiment.runClassicMethods(obs, [], cfg, ...
-                ["oracle", "static", "CovFit"]);
+                ["oracle", "incm_integral_processed", "incm_covfit"]);
             testCase.verifyEqual(record.weights(:, 2), expected, 'AbsTol', 1e-12);
             testCase.verifyEqual(record.diagnostics{2}.beamforming.method, "mvdr");
             testCase.verifyTrue(all(isfinite(record.sinrLinear)));
@@ -28,10 +28,10 @@ classdef TestClassicIncmSweeps < matlab.unittest.TestCase
         end
         function snapshotSelectionRejectsDuplicatesAndUnknownNames(testCase)
             cfg = config("smoke");
-            cfg.experiments.classicSnapshotMethodNames = ["static", "oracle"];
+            cfg.experiments.classicSnapshotMethodNames = ["incm_integral_processed", "oracle"];
             checked = uav.config.validate(cfg);
-            testCase.verifyEqual(checked.experiments.classicSnapshotMethodNames, ["static", "oracle"]);
-            cfg.experiments.classicSnapshotMethodNames = ["static", "static"];
+            testCase.verifyEqual(checked.experiments.classicSnapshotMethodNames, ["incm_integral_processed", "oracle"]);
+            cfg.experiments.classicSnapshotMethodNames = ["incm_integral_processed", "incm_integral_processed"];
             testCase.verifyError(@() uav.config.validate(cfg), 'uav:config:InvalidExperimentParameter');
             cfg.experiments.classicSnapshotMethodNames = "unknown";
             testCase.verifyError(@() uav.config.validate(cfg), 'uav:config:InvalidExperimentParameter');

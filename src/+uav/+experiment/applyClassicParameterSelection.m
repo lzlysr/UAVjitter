@@ -20,8 +20,11 @@ cfg.beamforming.classic.esp.signalSubspaceDimension = ...
 cfg.beamforming.calibration.designJitterStdDeg = ...
     selection.wcoDesignJitterStdDeg * ones(1, 3);
 cfg.spectrum.diagonalLoading = selection.staticSpectrumDiagonalLoading;
-cfg.spectrum.desiredExclusionHalfWidthDeg = ...
-    selection.staticDesiredExclusionHalfWidthDeg;
+if cfg.array.Nx>1 && cfg.array.Ny==1 && isfield(cfg.spectrum,'ulaDesiredExclusionHalfWidthDeg')
+    cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=selection.staticDesiredExclusionHalfWidthDeg;
+else
+    cfg.spectrum.desiredExclusionHalfWidthDeg=selection.staticDesiredExclusionHalfWidthDeg;
+end
 cfg.incm.shrinkage = selection.staticIncmShrinkage;
 cfg = uav.config.validate(cfg);
 end

@@ -6,7 +6,7 @@ function [record, nextState] = runClassicMethods(obs, priorState, cfg, methodNam
 
 methodNames = reshape(string(methodNames), 1, []);
 % 历史MAT/脚本仍可使用旧名；输出统一记录新标识，语义重复仍会被拒绝。
-methodNames(methodNames=="static_incm_mvdr")="CovFit";
+methodNames=uav.config.canonicalMethodNames(methodNames);
 validateMethodSelection(methodNames);
 if ~isstruct(obs) || ~all(isfield(obs, {'X', 'Rx', 'pilot', 'truth'}))
     error('uav:experiment:InvalidObservation', ...
@@ -25,6 +25,8 @@ incmMinimumEigenvalue = nan(1, methodCount);
 incmConditionNumber = nan(1, methodCount);
 weights = complex(zeros(cfg.derived.M, methodCount));
 diagnostics = cell(1, methodCount);
+methodStatus = repmat("ok",1,methodCount);
+notApplicableReason = strings(1,methodCount);
 
 for methodIndex = 1:methodCount
     methodTimer = tic;
@@ -87,20 +89,36 @@ for methodIndex = 1:methodCount
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "wco", safeObservation.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
-        case "static"
+        case {"incm_integral_processed", "incm_integral_origin"}
             % 直接复用原有static积分重构，不更改谱底、求积或结构处理。
             % 此经典对照接标准MVDR，与CovFit保持相同的名义响应约束。
             % 主线runMethods中的static仍接原鲁棒求解器，保持其定义不变。
-            [estimatedIncm, ~, reconstructionDiagnostics] = ...
-                uav.incm.reconstruct("static", safeObservation, [], cfg);
+            try
+                [estimatedIncm, ~, reconstructionDiagnostics] = ...
+                    uav.incm.reconstruct(method, safeObservation, [], cfg);
+            catch exception
+                if method=="incm_integral_origin" && ...
+                        strcmp(exception.identifier,'uav:incm:SingularSampleCovariance')
+                    % 未加载原始Rec在秩亏SCM下不适用；不伪逆、不补加载。
+                    methodStatus(methodIndex) = "not-applicable";
+                    notApplicableReason(methodIndex) = "原始Rec要求可逆SCM；当前矩阵秩亏或数值奇异";
+                    sinrLinear(methodIndex)=NaN; desiredGain(methodIndex)=NaN;
+                    interferenceLeakage(methodIndex)=NaN; weights(:,methodIndex)=NaN;
+                    runtimeSec(methodIndex)=toc(methodTimer);
+                    diagnostics{methodIndex}=struct('status',"not-applicable", ...
+                        'reason',notApplicableReason(methodIndex),'usedTruth',false);
+                    continue;
+                end
+                rethrow(exception);
+            end
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "mvdr", estimatedIncm, aRef, cfg);
             methodDiagnostics = struct( ...
                 'reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
-        case {"CovFit", "CovFit_local"}
+        case {"incm_covfit", "incm_covfit_refined"}
             % 两种重构接同一名义导向与标准MVDR；不叠加鲁棒权值增益。
-            if method=="CovFit"
+            if method=="incm_covfit"
                 [estimatedIncm, reconstructionDiagnostics] = ...
                     uav.incm.upaCovfit(safeObservation, cfg);
             else
@@ -145,6 +163,7 @@ record = struct( ...
     'incmConditionNumber', incmConditionNumber, ...
     'weights', weights, ...
     'diagnostics', {diagnostics}, ...
+    'methodStatus',methodStatus,'notApplicableReason',notApplicableReason, ...
     'snapshotSignatures', repmat(signature, methodCount, 1));
 nextState = state;
 end
@@ -164,7 +183,7 @@ end
 
 function validateMethodSelection(methodNames)
 allowed = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "CovFit", "CovFit_local", "static"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowed))

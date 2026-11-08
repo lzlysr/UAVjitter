@@ -11,6 +11,10 @@ validateInputs(currentMap, previousMap, mask, cfg);
 sanitizedPrevious = previousMap;
 sanitizedPrevious(~mask) = 0;
 maxShift = reshape(cfg.spectrum.alignmentMaxShiftBins, 1, 2);
+if isfield(cfg,'derived') && isfield(cfg.derived,'arrayType') && cfg.derived.arrayType == "ULA"
+    % 一维谱保存为行向量，仅搜索列平移；防止无效行位移制造重复候选。
+    maxShift(1) = 0;
+end
 % 预分配所有(rowShift,columnShift)候选及其相关系数。
 shifts = zeros(prod(2 * maxShift + 1), 2);
 scores = -inf(size(shifts, 1), 1);

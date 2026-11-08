@@ -9,7 +9,8 @@ if nargin < 4
     methodNames = cfg.experiments.methodNames;
 end
 methodNames = reshape(string(methodNames), 1, []);
-allowedMethods = ["oracle", "frozen", "scm", "dl", "static", "temporal"];
+methodNames = uav.config.canonicalMethodNames(methodNames);
+allowedMethods = ["oracle", "frozen", "scm", "dl", "incm_integral_processed", "temporal"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowedMethods))
@@ -77,10 +78,10 @@ for methodIndex = 1:methodCount
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "dlmvdr", obs.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
-        case "static"
+        case "incm_integral_processed"
             % 当前周期静态Capon-INCM + 与时序方法相同的鲁棒权值求解器。
             [estimatedIncm, ~, reconstructionDiagnostics] = ...
-                uav.incm.reconstruct("static", algorithmObservation, [], cfg);
+                uav.incm.reconstruct("incm_integral_processed", algorithmObservation, [], cfg);
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "robust", estimatedIncm, aRef, cfg);
             methodDiagnostics = struct('reconstruction', reconstructionDiagnostics, ...

@@ -14,13 +14,13 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
     end
 
     methods (Test)
-        % 新实验必须提供完整默认集合，同时允许用户选择任意合法非空组合。
+        % 核对用户当前默认子集，同时允许选择任意合法非空组合。
         function configAllowsSelectableClassicMethodCombinations(testCase)
             cfg = config('smoke');
             % 当前“已完成工作”图默认比较原五种方法并加入现有static；合法全集
             % 仍由配置校验器维护，用户可以继续改成任意非空且不重复子集。
             expected = ["oracle", "dl_mvdr", "esp", "wco", ...
-                "static", "CovFit", "CovFit_local"];
+                "incm_integral_processed", "incm_covfit_refined"];
 
             testCase.verifyEqual(cfg.experiments.classicJitterMethodNames, expected);
             testCase.verifyGreaterThan( ...
@@ -94,7 +94,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             testCase.verifyEqual(screening.snapshotCount, 8);
             testCase.verifyEqual(screening.scoreRule, "minimum-point-median");
             testCase.verifyEqual(unique(screening.ranking.method, 'stable'), ...
-                ["dl_mvdr"; "esp"; "wco"; "CovFit"]);
+                ["dl_mvdr"; "esp"; "wco"; "incm_covfit"]);
             testCase.verifyTrue(all(isfinite( ...
                 screening.ranking.minimumPointMedianSinrDb( ...
                 screening.ranking.validCandidate))));
@@ -258,7 +258,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
                 uav.util.makeStream(cfg.random.baseSeed, 610001));
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
                 uav.util.makeStream(cfg.random.baseSeed, 610101));
-            methods = ["oracle", "nsb", "nlms", "CovFit"];
+            methods = ["oracle", "nsb", "nlms", "incm_covfit"];
 
             [record, nextState] = uav.experiment.runClassicMethods( ...
                 obs, [], cfg, methods);
@@ -270,7 +270,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
                 repmat(record.snapshotSignatures(1, :), numel(methods), 1), ...
                 'AbsTol', 0);
             testCase.verifyEqual(record.diagnostics{4}.beamforming.method, "mvdr");
-            testCase.verifyEqual(record.diagnostics{4}.reconstruction.method, "static");
+            testCase.verifyEqual(record.diagnostics{4}.reconstruction.method, "incm_covfit");
             testCase.verifyEqual(nextState.nlms.method, "nlms");
             testCase.verifyFalse(any(contains( ...
                 string(fieldnames(nextState)), "truth")));
@@ -281,7 +281,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             cfg = compactClassicConfig(testCase);
             cfg.experiments.jitterSweepDeg = [0, 1];
             cfg.experiments.classicJitterMethodNames = ...
-                ["scm_mvdr", "dl_mvdr", "CovFit"];
+                ["scm_mvdr", "dl_mvdr", "incm_covfit"];
             cfg = uav.config.validate(cfg);
 
             result = exp06_classic_method_jitter_sweep(cfg);
@@ -306,7 +306,7 @@ classdef TestTask6ClassicJitter < matlab.unittest.TestCase
             cfg.experiments.jitterSweepDeg = [0, 1];
             cfg.experiments.classicJitterMethodNames = ["oracle", "nsb", ...
                 "frozen_mvdr", "scm_mvdr", "nlms", "rls", "pi", ...
-                "dl_mvdr", "esp", "wco", "CovFit"];
+                "dl_mvdr", "esp", "wco", "incm_covfit"];
             cfg = uav.config.validate(cfg);
 
             result = exp06_classic_method_jitter_sweep(cfg);

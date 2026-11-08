@@ -1,5 +1,5 @@
 function [A, desiredCount, nodes, diagnostics] = localPeakCandidates(Rx, original, cfg)
-%LOCALPEAKCANDIDATES 只改变干扰候选：二维局部极大值，而不是最强相邻网格单元。
+%LOCALPEAKCANDIDATES 提取干扰局部极大值，而不是最强相邻网格单元。
 %   期望字典沿用原CovFit；最终波束参考始终由实验层固定为名义导向。
 %   不使用真实干扰数或方向；阈值、上限、加载沿用原配置。
 local = cfg;
@@ -9,7 +9,7 @@ local.spectrum.peakNmsRadiusBins=cfg.incm.staticCovfit.peakNmsRadiusBins;
 [power,s] = uav.spectrum.loadedCapon(Rx,local);
 map=power; map(~s.visibleMask)=-Inf;
 isPeak=s.visibleMask;
-% 八邻域局部极大值检测；不跨越网格边界环绕比较。
+% UPA比较八邻域；ULA是单行谱，非空邻域仅剩左右两点。均不循环回绕。
 for dr=-1:1
     for dc=-1:1
         if dr==0 && dc==0,continue;end

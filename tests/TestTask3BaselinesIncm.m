@@ -158,8 +158,8 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             changedMvdr = uav.beamforming.solve("mvdr", R, aRef, changedCfg);
             dlmvdr = uav.beamforming.solve("dlmvdr", R, aRef, cfg);
             changedDlmvdr = uav.beamforming.solve("dlmvdr", R, aRef, changedCfg);
-            staticIncm = uav.incm.reconstruct("static", obs, [], cfg);
-            changedStaticIncm = uav.incm.reconstruct("static", obs, [], changedCfg);
+            staticIncm = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
+            changedStaticIncm = uav.incm.reconstruct("incm_integral_processed", obs, [], changedCfg);
 
             testCase.verifyEqual(changedMvdr, mvdr, 'AbsTol', 0);
             testCase.verifyEqual(changedDlmvdr, dlmvdr, 'AbsTol', 0);
@@ -260,13 +260,13 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
                     uav.util.makeStream(71, caseIndex + 10));
 
-                [RinHat, state, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+                [RinHat, state, diagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
 
                 testCase.verifyEqual(RinHat, RinHat', 'AbsTol', 1e-12);
                 testCase.verifyGreaterThanOrEqual(min(eig(RinHat)), ...
                     diagnostics.eigenvalueFloor * (1 - 1e-10));
                 testCase.verifyTrue(all(isfinite(RinHat), 'all'));
-                testCase.verifyEqual(state.method, "static");
+                testCase.verifyEqual(state.method, "incm_integral_processed");
             end
         end
 
@@ -281,7 +281,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 [eye(cfg.timeline.L); zeros(cfg.derived.M - cfg.timeline.L, cfg.timeline.L)];
             obs = struct('Rx', X * X' / cfg.timeline.L, 'X', X);
 
-            [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+            [~, ~, diagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
 
             testCase.verifyEqual(diagnostics.noiseEstimate, cfg.derived.noisePower, ...
                 'AbsTol', 1e-12);
@@ -301,7 +301,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 obs = uav.scenario.generatePeriod(cfg, scenario, 1, ...
                     uav.util.makeStream(74, snapshotCount));
 
-                [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+                [~, ~, diagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
 
                 testCase.verifyEqual(diagnostics.noiseEstimate, cfg.derived.noisePower, ...
                     'AbsTol', 0);
@@ -321,7 +321,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 [eye(cfg.derived.M), zeros(cfg.derived.M, cfg.timeline.L - cfg.derived.M)];
             obs = struct('Rx', X * X' / cfg.timeline.L, 'X', X);
 
-            [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+            [~, ~, diagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
 
             testCase.verifyEqual(diagnostics.noiseEstimate, cfg.derived.noisePower, ...
                 'AbsTol', 1e-12);
@@ -334,7 +334,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             obs = struct('Rx', eye(cfg.derived.M), ...
                 'X', zeros(cfg.derived.M - 1, cfg.timeline.L));
 
-            testCase.verifyError(@() uav.incm.reconstruct("static", obs, [], cfg), ...
+            testCase.verifyError(@() uav.incm.reconstruct("incm_integral_processed", obs, [], cfg), ...
                 'uav:incm:InvalidObservation');
         end
 
@@ -346,7 +346,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             cfg = uav.config.validate(cfg);
             noiseOnlyObservation = struct('Rx', cfg.derived.noisePower * eye(cfg.derived.M));
 
-            [RinHat, ~, diagnostics] = uav.incm.reconstruct("static", ...
+            [RinHat, ~, diagnostics] = uav.incm.reconstruct("incm_integral_processed", ...
                 noiseOnlyObservation, [], cfg);
 
             testCase.verifyEqual(RinHat, cfg.derived.noisePower * eye(cfg.derived.M), ...
@@ -370,9 +370,9 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
                 'trueIncm', nan(cfg.derived.M), 'desiredPower', -1, ...
                 'interfererPowers', inf(1, cfg.derived.J));
 
-            reference = uav.incm.reconstruct("static", obs, [], cfg);
-            removed = uav.incm.reconstruct("static", truthRemoved, [], cfg);
-            poisoned = uav.incm.reconstruct("static", truthPoisoned, [], cfg);
+            reference = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
+            removed = uav.incm.reconstruct("incm_integral_processed", truthRemoved, [], cfg);
+            poisoned = uav.incm.reconstruct("incm_integral_processed", truthPoisoned, [], cfg);
 
             testCase.verifyEqual(removed, reference, 'AbsTol', 0);
             testCase.verifyEqual(poisoned, reference, 'AbsTol', 0);
@@ -384,7 +384,7 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             scenario = uav.scenario.generate(cfg, uav.util.makeStream(81, 1));
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(81, 2));
 
-            [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+            [~, ~, diagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
 
             desiredXi = cfg.derived.nominalDirectionCosines(:, 1);
             distanceSquared = (diagnostics.spectrum.xiX - desiredXi(1)).^2 + ...
@@ -404,8 +404,8 @@ classdef TestTask3BaselinesIncm < matlab.unittest.TestCase
             scenario = uav.scenario.generate(cfg, uav.util.makeStream(83, 1));
             obs = uav.scenario.generatePeriod(cfg, scenario, 1, uav.util.makeStream(83, 2));
 
-            [first, ~, firstDiagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
-            [second, ~, secondDiagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+            [first, ~, firstDiagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
+            [second, ~, secondDiagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
             metricsTruth = obs.truth;
             metricsTruth.estimatedIncm = first;
             metrics = uav.metrics.evaluate(cfg.derived.nominalSteeringReference, metricsTruth, cfg);

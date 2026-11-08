@@ -368,7 +368,7 @@ classdef TestTask4TemporalRobust < matlab.unittest.TestCase
             aRef = cfg.derived.nominalSteeringReference;
             obs = struct('Rx', 100 * (aRef * aRef') + eye(cfg.derived.M));
 
-            [~, ~, diagnostics] = uav.incm.reconstruct("static", obs, [], cfg);
+            [~, ~, diagnostics] = uav.incm.reconstruct("incm_integral_processed", obs, [], cfg);
 
             desiredXi = cfg.derived.nominalDirectionCosines(:, 1);
             distanceSquared = (diagnostics.spectrum.xiX - desiredXi(1)).^2 + ...

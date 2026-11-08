@@ -1,7 +1,7 @@
 function [powerMap, diagnostics] = loadedCapon(Rx, cfg)
-%LOADEDCAPON 在二维方向余弦可见域计算加载Capon空间谱。
+%LOADEDCAPON 在UPA二维方向余弦域或ULA一维角域计算加载Capon谱。
 %   Rx       - M×M当前周期样本协方差；
-%   powerMap - gridSize×gridSize功率图，可见圆盘外为NaN；
+%   powerMap - UPA为gridSize×gridSize；ULA为1×gridSize，可见域外为NaN；
 %   diagnostics包含网格、加载量和实际求解使用的协方差。
 %
 %   Capon谱为P(xi)=1/(a(xi)^H Rload^{-1} a(xi))。网格流形在配置
@@ -38,6 +38,14 @@ diagnostics = struct( ...
     'usedCachedManifold', true, ...
     'loading', loading, ...
     'loadedCovariance', loadedCovariance);
+if isfield(grid,'dimension')
+    diagnostics.dimension = grid.dimension;
+    diagnostics.coordinate = grid.coordinate;
+    diagnostics.measure = grid.measure;
+    diagnostics.thetaRad = grid.thetaRad;
+    diagnostics.step = grid.step;
+    diagnostics.weights = grid.weights;
+end
 end
 
 function validateInputs(Rx, cfg)
