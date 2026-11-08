@@ -51,9 +51,9 @@ classdef TestIncmNamesAndSectors < matlab.unittest.TestCase
             testCase.verifyEqual(cfg.derived.ulaGeometry.interferersInsideDesiredSector,[false,false]);
             nodes=[cfg.derived.nominalDirectionCosines(1,2:end).',zeros(2,1)];
             testCase.verifyTrue(all(uav.spectrum.admissibleDirections(nodes,cfg)));
-            cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=25;cfg=uav.config.validate(cfg);
-            testCase.verifyEqual(cfg.derived.ulaGeometry.interferersInsideDesiredSector,[true,true]);
-            testCase.verifyFalse(any(uav.spectrum.admissibleDirections(nodes,cfg)));
+            cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=45;cfg=uav.config.validate(cfg);
+            testCase.verifyEqual(cfg.derived.ulaGeometry.interferersInsideDesiredSector,[true,false]);
+            testCase.verifyEqual(uav.spectrum.admissibleDirections(nodes,cfg),[false;true]);
         end
         function oneDimensionalMaskUsesExactSameHalfWidth(testCase)
             cfg=config('smoke');cfg.array.Nx=9;cfg.array.Ny=1;
@@ -64,7 +64,8 @@ classdef TestIncmNamesAndSectors < matlab.unittest.TestCase
                 [true;false;false;true]);
         end
         function changingUlaWidthDoesNotAffectUpaReconstruction(testCase)
-            cfg=config('smoke');obs=struct('Rx',diag(1:9),'X',ones(9,32));
+            cfg=config('smoke');cfg.array.Nx=3;cfg.array.Ny=3;cfg=uav.config.validate(cfg);
+            obs=struct('Rx',diag(1:9),'X',ones(9,32));
             a=uav.incm.reconstruct("incm_integral_processed",obs,[],cfg);
             changed=cfg;changed.spectrum.ulaDesiredExclusionHalfWidthDeg=1;
             changed=uav.config.validate(changed);
@@ -74,6 +75,8 @@ classdef TestIncmNamesAndSectors < matlab.unittest.TestCase
         end
         function historicalConfigurationsKeepTheirOldWidth(testCase)
             cfg=config('smoke');cfg.array.Nx=9;cfg.array.Ny=1;
+            % 历史配置也缺少新方向约定标记，因此仍按旧三维投影验证宽度回退。
+            cfg.array=rmfield(cfg.array,'ulaDirectionConvention');
             cfg.spectrum=rmfield(cfg.spectrum,'ulaDesiredExclusionHalfWidthDeg');
             cfg=uav.config.validate(cfg);
             testCase.verifyEqual(cfg.derived.desiredExclusionHalfWidthDeg,25);

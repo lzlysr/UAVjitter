@@ -1,6 +1,13 @@
 classdef TestStaticCovfitSmoke < matlab.unittest.TestCase
     %TESTSTATICCOVFITSMOKE 验证零抖动smoke场景中的经典静态INCM替换。
 
+    methods(TestMethodSetup)
+        function addPaths(testCase)
+            root=fileparts(fileparts(mfilename('fullpath')));
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture(root));
+            testCase.applyFixture(matlab.unittest.fixtures.PathFixture(fullfile(root,'src')));
+        end
+    end
     methods (Test)
         function classicStaticMethodUsesUpaCovfitAtZeroJitter(testCase)
             % 若经典方法仍调用旧的均匀Capon积分，本测试会因估计器标识缺失而失败。

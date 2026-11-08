@@ -1,6 +1,7 @@
 function result = runClassicSweep(cfg, scanKind)
-%RUNCLASSICSWEEP 两张经典方法对照图共用的配对扫描、统计和导出流程。
+%RUNCLASSICSWEEP 实验6/7/8共用的配对扫描、统计和导出流程。
 %   jitter只改变三轴相同RMS；snapshots只改变L并固定配置的三轴RMS。
+%   snr只改变期望输入SNR；L和三轴RMS由实验8专用配置固定，不改INR。
 %   每个扫描点内全部方法共享观测，不自动加入run_all。
 
 experimentTimer = tic;
@@ -22,8 +23,20 @@ switch string(scanKind)
         xLabel = '每周期快拍数 L';
         pointVariable = 'snapshotCount';
         experimentName = "exp07_classic_method_snapshot_sweep";
+    case "snr"
+        experimentIndex = 8;
+        scanPoints = cfg.experiments.snrSweepDb;
+        methodNames = reshape(cfg.experiments.classicSnrMethodNames, 1, []);
+        periodCount = cfg.experiments.periodCounts.snrSweep;
+        xLabel = '输入SNR（dB）';
+        pointVariable = 'inputSnrDb';
+        experimentName = "exp08_classic_method_snr_sweep";
+        % 在标定及生成观测之前设置固定条件，最终MAT也保存实际使用值。
+        cfg.timeline.L = cfg.experiments.classicSnrSnapshotCount;
+        cfg.attitude.stdDeg = cfg.experiments.classicSnrJitterStdDeg;
+        cfg = uav.config.validate(cfg);
     otherwise
-        error('uav:experiment:InvalidClassicScan', '扫描类型必须为jitter或snapshots。');
+        error('uav:experiment:InvalidClassicScan', '扫描类型必须为jitter、snapshots或snr。');
 end
 if cfg.derived.arrayType == "ULA" && ~any(methodNames=="wco")
     % 经典INCM都接标准MVDR；未选择WCO时不应被其不可行半径阻断。
@@ -49,11 +62,14 @@ seeds = cell(1, pointCount);
 
 for pointIndex = 1:pointCount
     pointCfg = cfg;
-    if string(scanKind) == "jitter"
-        pointCfg.attitude.stdDeg = scanPoints(pointIndex) * ...
-            ones(size(cfg.attitude.stdDeg));
-    else
-        pointCfg.timeline.L = scanPoints(pointIndex);
+    switch string(scanKind)
+        case "jitter"
+            pointCfg.attitude.stdDeg = scanPoints(pointIndex) * ...
+                ones(size(cfg.attitude.stdDeg));
+        case "snapshots"
+            pointCfg.timeline.L = scanPoints(pointIndex);
+        case "snr"
+            pointCfg.signal.snrDb = scanPoints(pointIndex);
     end
     pointCfg = uav.config.validate(pointCfg);
     % WCO半径由实验开始前的固定设计分布标定，扫描时不使用当前真值重算。

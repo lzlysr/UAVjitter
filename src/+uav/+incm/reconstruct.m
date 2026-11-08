@@ -11,6 +11,11 @@ function [RinHat, nextState, diagnostics] = reconstruct(method, obs, priorState,
 
 method = lower(uav.config.canonicalMethodNames(method));
 validateInputs(obs, cfg);
+isUniformIntegral=ismember(method,["incm_integral_origin","incm_integral_processed"]);
+if isUniformIntegral
+    % 两种积分与CovFit直接入口采用同一网格选择器；temporal不受影响。
+    cfg=uav.spectrum.useUlaComparisonGrid(cfg);
+end
 switch method
     case "incm_integral_processed"
         [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg);
@@ -41,6 +46,10 @@ switch method
 end
 diagnostics.method=method;
 diagnostics.desiredExclusionHalfWidthDeg=uav.spectrum.desiredExclusionHalfWidth(cfg);
+if isUniformIntegral
+    diagnostics.integrationGridSize=cfg.spectrum.gridSize;
+    diagnostics.integrationMeasure=cfg.derived.spectrumGrid.measure;
+end
 end
 
 function [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg)

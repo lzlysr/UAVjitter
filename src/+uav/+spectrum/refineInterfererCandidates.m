@@ -1,8 +1,8 @@
-function [A,nodes,d] = refineInterfererCandidates(obs, original, cfg)
+function [A,nodes,d] = refineInterfererCandidates(obs, nodes, D, cfg)
 %REFINEINTERFERERCANDIDATES 观测驱动局部Capon峰的亚网格细化，不校正期望参考。
 %   低加载与峰细化分别作为显式消融，不冒充Lin的BCS或Taylor原算法。
+%   nodes和D由两种CovFit共用前端给出，不在细化分支重新筛选候选。
 %   仅优化期望区外的干扰节点；候选数量不读取真实J，期望字典保持不变。
-[~,D,nodes] = uav.spectrum.localPeakCandidates(obs.Rx,original,cfg);
 if isfield(cfg.derived,'arrayType') && cfg.derived.arrayType == "ULA"
     [A,nodes,d] = uav.spectrum.refineUlaCandidates(obs,nodes,D,cfg);
     return;

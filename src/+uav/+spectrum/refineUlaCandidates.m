@@ -8,6 +8,7 @@ inverse = Rc\eye(M);
 reference = asin(max(-1,min(1,cfg.derived.nominalDirectionCosines(1,1))));
 halfWidth = deg2rad(uav.spectrum.desiredExclusionHalfWidth(cfg));
 radius = cfg.incm.localCovfit.radiusBins*cfg.derived.spectrumGrid.step;
+% radiusBins不自动改参；四方法统一高密度网格后，细化物理半径随步长缩小。
 settings = cfg.incm.localCovfit.solver;
 options = optimoptions('fmincon','Algorithm','sqp','Display','off', ...
     'SpecifyObjectiveGradient',true,'MaxIterations',settings.maxIterations, ...

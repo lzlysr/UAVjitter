@@ -57,7 +57,11 @@ classdef TestClassicIncmSweeps < matlab.unittest.TestCase
                 value = result{1};
                 testCase.verifyEqual(value.status, "complete");
                 testCase.verifyEqual(size(value.raw.sinrLinear), [2, 2, 2, numel(value.methodNames)]);
-                testCase.verifyTrue(all(isfinite(value.raw.sinrLinear), 'all'));
+                % 原始Rec在L<M时按既有契约标记不适用；只允许这些位置为NaN。
+                unavailable=value.raw.methodStatus=="not-applicable";
+                testCase.verifyTrue(all(isfinite(value.raw.sinrLinear(~unavailable)), 'all'));
+                testCase.verifyTrue(all(isnan(value.raw.sinrLinear(unavailable)), 'all'));
+                testCase.verifyTrue(all(strlength(value.raw.notApplicableReason(unavailable))>0, 'all'));
                 testCase.verifyTrue(isfile(value.artifacts.mat));
                 testCase.verifyTrue(isfile(value.artifacts.fig));
                 testCase.verifyTrue(isfile(value.artifacts.pdf));

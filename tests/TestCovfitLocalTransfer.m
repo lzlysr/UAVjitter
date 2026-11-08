@@ -23,7 +23,7 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
             cfg=config('smoke');cfg.incm.localCovfit.radiusBins=0;
             testCase.verifyError(@()uav.config.validate(cfg),'uav:config:InvalidAlgorithmParameter');
         end
-        function pairedArchivedObservationsMatchResearch(testCase)
+        function refinedArchivedObservationsStillMatchResearch(testCase)
             root=fileparts(fileparts(mfilename('fullpath')));base=config('smoke');
             research='D:/workspace/UAVjitter-worktrees/lin-yue-upa-snapshot-study/results/raw/lin_yue_refinement_2026-10-21';
             snapshot=fullfile(research,'lin_yue_snapshot_study_smoke.mat');
@@ -48,7 +48,8 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
                     obs=uav.scenario.generatePeriod(cfg,scene,k, ...
                         uav.util.makeStream(cfg.random.baseSeed,seed.snapshotSubstreams(1,k)));
                     record=uav.experiment.runClassicMethods(obs,[],cfg,["incm_covfit","incm_covfit_refined"]);
-                    testCase.verifyEqual(record.sinrLinear,expected(k,:),'RelTol',1e-10);
+                    % 普通版已按用户要求更换前端；只要求作为基准的细化版数值不变。
+                    testCase.verifyEqual(record.sinrLinear(2),expected(k,2),'RelTol',1e-10);
                     testCase.verifyEqual(record.diagnostics{2}.beamforming.method,"mvdr");
                     testCase.verifyFalse(record.diagnostics{2}.reconstruction.usedTruth);
                     testCase.verifyLessThan(record.diagnostics{2}.reconstruction.relativeKktResidual,1e-8);
@@ -65,7 +66,7 @@ classdef TestCovfitLocalTransfer < matlab.unittest.TestCase
             comparison=vertcat(rows{:});disp(comparison);
             folder=fullfile(root,'results','tables','covfit_local_transfer_smoke');
             if ~isfolder(folder),mkdir(folder);end
-            writetable(comparison,fullfile(folder,'research_main_parity.csv'));
+            writetable(comparison,fullfile(folder,'refined_parity_and_changed_baseline.csv'));
         end
         function bothClassicExperimentsExportSelectedMethods(testCase)
             root=fileparts(fileparts(mfilename('fullpath')));cfg=config('smoke');

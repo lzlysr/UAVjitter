@@ -14,8 +14,16 @@ for index = 1:numel(requiredSections)
     end
 end
 
+% 历史MAT字段兼容：输出统一为ulaGridSize；新字段显式存在时优先使用。
+if isfield(cfg.spectrum,'ulaIntegrationGridSize')
+    if ~isfield(cfg.spectrum,'ulaGridSize')
+        cfg.spectrum.ulaGridSize=cfg.spectrum.ulaIntegrationGridSize;
+    end
+    cfg.spectrum=rmfield(cfg.spectrum,'ulaIntegrationGridSize');
+end
+
 % 旧方法标识兼容：只改名称，不改历史配置的物理参数；同义重复仍拒绝。
-for field={"methodNames","exp02MethodNames","classicJitterMethodNames","classicSnapshotMethodNames"}
+for field={"methodNames","exp02MethodNames","classicJitterMethodNames","classicSnapshotMethodNames","classicSnrMethodNames"}
     name=field{1};
     if isfield(cfg.experiments,name) && isstring(cfg.experiments.(name))
         cfg.experiments.(name)=uav.config.canonicalMethodNames(cfg.experiments.(name));
@@ -24,6 +32,17 @@ end
 % 第一组：阵列、时间、姿态、随机和网格的基本尺寸与范围检查。
 validatePositiveInteger(cfg.array.Nx, 'array.Nx');
 validatePositiveInteger(cfg.array.Ny, 'array.Ny');
+isUla = cfg.array.Nx > 1 && cfg.array.Ny == 1;
+% 新配置显式采用ULA方位角；缺少标记的历史MAT保留原三维投影语义。
+ulaConvention="world_az_el_projection";
+if isfield(cfg.array,'ulaDirectionConvention')
+    ulaConvention=string(cfg.array.ulaDirectionConvention);
+    if ~isscalar(ulaConvention) || ismissing(ulaConvention) || ...
+            ~ismember(ulaConvention,["azimuth_broadside","world_az_el_projection"])
+        error('uav:config:InvalidDirectionConvention','ULA方向约定必须为azimuth_broadside或历史world_az_el_projection。');
+    end
+end
+useUlaAzimuth=isUla && ulaConvention=="azimuth_broadside";
 validateFiniteVector(cfg.array.spacingOverLambda, 2, 'array.spacingOverLambda');
 if any(cfg.array.spacingOverLambda <= 0)
     error('uav:config:NonPositiveSpacing', 'Array spacings must be positive.');
@@ -50,7 +69,19 @@ if cfg.spectrum.gridSize < 3 || mod(cfg.spectrum.gridSize, 2) == 0
     error('uav:config:InvalidPositiveInteger', ...
         'spectrum.gridSize must be an odd integer greater than or equal to three.');
 end
+if isfield(cfg.spectrum,'ulaGridSize')
+    validatePositiveInteger(cfg.spectrum.ulaGridSize,'spectrum.ulaGridSize');
+    if cfg.spectrum.ulaGridSize<3 || mod(cfg.spectrum.ulaGridSize,2)==0
+        error('uav:config:InvalidPositiveInteger','ULA积分网格点数必须为不小于3的奇数。');
+    end
+end
 validateAlgorithmParameters(cfg);
+if isfield(cfg.incm,'localCovfit')
+    % 普通版与细化版共用细化版参数；旧字段只作镜像，防止两套参数漂移。
+    for field={'loadingRatio','fitRegularization','peakThresholdRatio','peakNmsRadiusBins','maximumCandidateCount'}
+        cfg.incm.staticCovfit.(field{1})=cfg.incm.localCovfit.(field{1});
+    end
+end
 % 第二组：功率、实验扫描和结果管理参数检查。
 validateFiniteScalar(cfg.signal.snrDb, 'signal.snrDb');
 validateFiniteScalar(cfg.signal.noisePower, 'signal.noisePower');
@@ -64,8 +95,8 @@ if any(cfg.experiments.jitterSweepDeg < 0) || any(cfg.experiments.snapshotSweep 
 end
 validateExperimentParameters(cfg);
 
-% 第三组：方向采用[azimuth,elevation]，当前下行场景限定在阵列下半球。
-validateDirections(cfg.sources.desiredAzElDeg, 'desired');
+% UPA/历史ULA检查下半球；新ULA只使用第一列方位角，忽略高度角范围。
+validateDirections(cfg.sources.desiredAzElDeg, 'desired',useUlaAzimuth);
 if ~isequal(size(cfg.sources.desiredAzElDeg), [1, 2])
     error('uav:config:DesiredDirectionShape', 'Desired direction must be a 1-by-2 azimuth/elevation vector.');
 end
@@ -76,7 +107,7 @@ if size(cfg.sources.interfererAzElDeg, 2) ~= 2
     error('uav:config:InterfererDirectionShape', ...
         'Interferer directions must have two columns: azimuth and elevation.');
 end
-validateDirections(cfg.sources.interfererAzElDeg, 'interferer');
+validateDirections(cfg.sources.interfererAzElDeg, 'interferer',useUlaAzimuth);
 
 J = size(cfg.sources.interfererAzElDeg, 1);
 % J由干扰方向行数自动推导；J=0时统一保存为1×0功率向量。
@@ -93,12 +124,17 @@ end
 
 azElDeg = [cfg.sources.desiredAzElDeg; cfg.sources.interfererAzElDeg];
 % 名义姿态下预计算世界方向、阵列方向、方向余弦和所有源的名义流形。
-worldUnitVectors = azElToUnitVectors(azElDeg);
+if useUlaAzimuth
+    % ULA正侧向取+y；如此零姿态下u_x=sin(配置方位角)，不再依赖高度角。
+    phi=deg2rad(azElDeg(:,1)).';
+    worldUnitVectors=[sin(phi);cos(phi);zeros(size(phi))];
+else
+    worldUnitVectors = azElToUnitVectors(azElDeg);
+end
 nominalRotation = rotationZYX(deg2rad(cfg.attitude.nominalDeg));
 nominalArrayUnitVectors = nominalRotation.' * worldUnitVectors;
 directionCosines = nominalArrayUnitVectors(1:2, :);
 % 仅新增沿x轴的一维模式；不改变既有UPA及其他历史尺寸的处理路径。
-isUla = cfg.array.Nx > 1 && cfg.array.Ny == 1;
 arrayType = "UPA"; spatialDimension = 2;
 if isUla
     arrayType = "ULA"; spatialDimension = 1;
@@ -169,28 +205,41 @@ else
     grid.step = 2 / (cfg.spectrum.gridSize - 1);
 end
 cfg.derived.spectrumGrid = grid;
+if isUla && isfield(cfg.spectrum,'ulaGridSize')
+    % 独立缓存ULA四种静态重构共用的高密度节点，temporal保留基础谱网格。
+    integralGrid=grid;
+    [integralGrid.axis,integralGrid.xiX,integralGrid.xiY,integralGrid.visibleMask, ...
+        integralGrid.visibleLinearIndices,integralGrid.directionCosines, ...
+        integralGrid.manifold,integralGrid.cellArea]=spectrumGrid(cfg,cfg.spectrum.ulaGridSize);
+    integralGrid.thetaRad=integralGrid.axis;
+    integralGrid.step=integralGrid.cellArea;
+    integralGrid.weights=integralGrid.step*ones(numel(integralGrid.visibleLinearIndices),1);
+    cfg.derived.ulaIntegrationGrid=integralGrid;
+end
 cfg.derived.desiredExclusionHalfWidthDeg = uav.spectrum.desiredExclusionHalfWidth(cfg);
 if isUla
     % 仅配置诊断：记录名义干扰与期望区的投影重叠，不参与算法选峰。
     sourceAngles = asin(max(-1, min(1, directionCosines(1, :))));
     cfg.derived.ulaGeometry = struct('nominalAnglesRad', sourceAngles, ...
+        'directionConvention',ulaConvention,'heightIgnored',useUlaAzimuth, ...
         'interferersInsideDesiredSector', ...
         abs(sourceAngles(2:end)-sourceAngles(1)) <= deg2rad(cfg.derived.desiredExclusionHalfWidthDeg));
 end
 end
 
 function [axisValues, xiX, xiY, visibleMask, visibleIndices, ...
-        directionCosines, manifold, cellArea] = spectrumGrid(cfg)
+        directionCosines, manifold, cellArea] = spectrumGrid(cfg,gridSize)
 %SPECTRUMGRID 预计算UPA二维网格或x轴ULA一维角网格及对应流形。
-% 缓存M×Nvisible流形可避免每个周期、每种方法重复生成相同导向矢量。
+% 同一构造器用于候选网格和独立积分网格，不修改调用者参数。
+if nargin<2,gridSize=cfg.spectrum.gridSize;end
 if cfg.array.Nx > 1 && cfg.array.Ny == 1
     % 中点角网格避开端点；sin(theta)直接匹配x轴ULA的相位投影。
-    step = pi / cfg.spectrum.gridSize;
-    axisValues = -pi/2 + step/2 + step*(0:cfg.spectrum.gridSize-1);
+    step = pi / gridSize;
+    axisValues = -pi/2 + step/2 + step*(0:gridSize-1);
     xiX = sin(axisValues); xiY = zeros(size(xiX));
     visibleMask = true(size(xiX));
 else
-    axisValues = linspace(-1, 1, cfg.spectrum.gridSize);
+    axisValues = linspace(-1, 1, gridSize);
     [xiX, xiY] = meshgrid(axisValues, axisValues);
     visibleMask = xiX.^2 + xiY.^2 <= 1;
 end
@@ -202,7 +251,7 @@ manifold = steeringReference(directionCosines, cfg.array.Nx, cfg.array.Ny, ...
     cfg.array.spacingOverLambda);
 gridStep = axisValues(2) - axisValues(1);
 if cfg.array.Nx > 1 && cfg.array.Ny == 1
-    cellArea = pi / cfg.spectrum.gridSize;
+    cellArea = pi / gridSize;
 else
     cellArea = gridStep^2;
 end
@@ -492,9 +541,13 @@ if ~isstring(cfg.experiments.classicJitterMethodNames) || ...
         'unique subset of the supported classic methods.']);
 end
 validateClassicTuning(cfg.experiments.classicTuning);
-if any([classicMethods,reshape(cfg.experiments.classicSnapshotMethodNames,1,[])]=="incm_covfit_refined") && ...
+selectedClassicMethods=[classicMethods,reshape(cfg.experiments.classicSnapshotMethodNames,1,[])];
+if isfield(cfg.experiments,'classicSnrMethodNames')
+    selectedClassicMethods=[selectedClassicMethods,reshape(cfg.experiments.classicSnrMethodNames,1,[])];
+end
+if any(ismember(selectedClassicMethods,["incm_covfit","incm_covfit_refined"])) && ...
         ~isfield(cfg.incm,'localCovfit')
-    experimentError('选择incm_covfit_refined时必须提供incm.localCovfit配置。');
+    experimentError('选择任一种CovFit时必须提供共用incm.localCovfit配置。');
 end
 snapshotMethods = reshape(cfg.experiments.classicSnapshotMethodNames, 1, []);
 if ~isstring(cfg.experiments.classicSnapshotMethodNames) || ...
@@ -507,6 +560,28 @@ end
 
 periodFields = {'modelValidation', 'jitterSweep', 'snapshotSweep', ...
     'dynamicStability', 'ablation'};
+% 旧MAT配置没有实验8字段时仍可重放实验6/7；新配置必须完整提供实验8。
+snrFields={'snrSweepDb','classicSnrSnapshotCount','classicSnrJitterStdDeg','classicSnrMethodNames'};
+hasSnr=any(isfield(cfg.experiments,snrFields)) || ...
+    (isstruct(cfg.experiments.periodCounts) && isfield(cfg.experiments.periodCounts,'snrSweep'));
+if hasSnr
+    if ~all(isfield(cfg.experiments,snrFields))
+        experimentError('实验8配置不完整，请使用当前config.m生成配置。');
+    end
+    validateFiniteVector(cfg.experiments.snrSweepDb, [], 'experiments.snrSweepDb');
+    validatePositiveInteger(cfg.experiments.classicSnrSnapshotCount, 'experiments.classicSnrSnapshotCount');
+    validateFiniteVector(cfg.experiments.classicSnrJitterStdDeg, 3, 'experiments.classicSnrJitterStdDeg');
+    if any(cfg.experiments.classicSnrJitterStdDeg<0)
+        experimentError('实验8的三轴姿态RMS必须非负。');
+    end
+    snrMethods=reshape(cfg.experiments.classicSnrMethodNames,1,[]);
+    if ~isstring(snrMethods) || isempty(snrMethods) || ...
+            numel(unique(snrMethods))~=numel(snrMethods) || ...
+            any(~ismember(snrMethods,allowedClassicMethods))
+        experimentError('classicSnrMethodNames必须为支持的经典方法的非空、无重复字符串数组。');
+    end
+    periodFields{end+1}='snrSweep';
+end
 if ~isstruct(cfg.experiments.periodCounts) || ...
         ~all(isfield(cfg.experiments.periodCounts, periodFields))
     experimentError('experiments.periodCounts is incomplete.');
@@ -565,13 +640,16 @@ for index = 1:numel(substreamFields)
     end
 end
 maximumExperimentPeriods = max(structfun(@double, cfg.experiments.periodCounts));
+maximumScanPoints=max(numel(cfg.experiments.jitterSweepDeg),numel(cfg.experiments.snapshotSweep));
+if hasSnr
+    maximumScanPoints=max(maximumScanPoints,numel(cfg.experiments.snrSweepDb));
+end
 if substreams.snapshotOffset <= substreams.scenarioOffset || ...
         substreams.bootstrapOffset <= substreams.snapshotOffset + maximumExperimentPeriods || ...
         substreams.trialStride <= substreams.bootstrapOffset || ...
         substreams.pointStride <= cfg.monteCarlo.nTrials * substreams.trialStride || ...
         substreams.experimentStride <= ...
-            max(numel(cfg.experiments.jitterSweepDeg), ...
-            numel(cfg.experiments.snapshotSweep)) * substreams.pointStride
+            maximumScanPoints * substreams.pointStride
     experimentError('Substream strides do not isolate experiments, points, trials, and periods.');
 end
 if ~isstring(cfg.experiments.codeVersion) || ~isscalar(cfg.experiments.codeVersion) || ...
@@ -730,9 +808,15 @@ if ~isscalar(value) || ~isfinite(value)
 end
 end
 
-function validateDirections(azElDeg, sourceName)
+function validateDirections(azElDeg, sourceName,useUlaAzimuth)
 if ~isnumeric(azElDeg) || size(azElDeg, 2) ~= 2 || any(~isfinite(azElDeg), 'all')
     error('uav:config:InvalidDirection', '%s directions must be finite azimuth/elevation pairs.', sourceName);
+end
+if useUlaAzimuth
+    if any(abs(azElDeg(:,1))>90)
+        error('uav:config:InvalidDirection','ULA方位角必须位于[-90,90]度；高度角不参与模型。');
+    end
+    return;
 end
 elevationDeg = azElDeg(:, 2);
 if any(elevationDeg < -90 | elevationDeg >= 0)

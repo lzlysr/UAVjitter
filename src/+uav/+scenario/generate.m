@@ -66,6 +66,10 @@ scenario = struct( ...
     'directionCosines', directionCosines, ...
     'azElRad', azElRad, ...
     'steeringTruth', steeringTruth);
+if cfg.derived.arrayType=="ULA"
+    % azElRad仍是标准笛卡尔诊断角；ULA实际方位单独记录，避免混用两套零点。
+    scenario.ulaAzimuthRad=asin(max(-1,min(1,reshape(arrayUnitVectors(1,:,:),sourceCount,K))));
+end
 end
 
 function validateStream(stream)

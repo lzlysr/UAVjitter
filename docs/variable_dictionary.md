@@ -3,6 +3,11 @@
 | 符号或字段 | 尺寸 | 含义 | 可访问范围 |
 | --- | ---: | --- | --- |
 | `Nx, Ny` | 标量 | UPA沿阵列坐标系x、y方向的阵元数 | 配置参数 |
+| `array.ulaDirectionConvention` | 字符串 | 新配置为`azimuth_broadside`：ULA第一列为0度朝+y的方位角，忽略高度角；UPA不使用 | 配置约定 |
+| `spectrum.gridSize` | 正奇数 | 基础谱网格，UPA为每轴点数；ULA的temporal仍用此一维点数 | 配置参数 |
+| `spectrum.ulaGridSize` | 正奇数 | ULA两种积分及两种CovFit共用的独立点数，默认2001；temporal不变 | 配置参数 |
+| `derived.ulaIntegrationGrid` | 结构体 | ULA四种静态重构共用流形、角节点及弧度权重；仅显式配置时创建 | 配置缓存 |
+| `ulaAzimuthRad` | 场景为`(J+1)×K`，周期真值为`(J+1)×1` | 旋转后ULA实际方位`asin(u_x)`，不是标准笛卡尔`azElRad` | 真值或诊断量 |
 | `M` | 标量 | 阵元总数 `Nx*Ny` | 派生配置 |
 | `J` | 标量 | 根据干扰方向和INR数组推导的干扰数 | 派生配置 |
 | `K, L` | 标量 | 处理周期数和每周期快拍数 | 配置参数或扫描参数 |
@@ -17,13 +22,16 @@
 | `Rx_k` | `M×M` | 样本协方差矩阵 `X X^H/L` | 算法观测 |
 | `Rin_k` | `M×M` | 理论干扰加噪声协方差矩阵 | Oracle或指标模块 |
 | `RinHat_k` | `M×M` | 重构得到的INCM | 算法估计量 |
-| `incm.staticCovfit.loadingRatio` | 标量 | `CovFit`候选Capon谱的相对加载系数，当前默认0.12 | 配置参数 |
-| `incm.staticCovfit.fitRegularization` | 标量 | 非负协方差拟合的L2正则化系数，当前默认5000 | 配置参数 |
-| `incm.staticCovfit.peakThresholdRatio` | 标量 | 相对谱峰阈值，当前默认0.15 | 配置参数 |
-| `incm.staticCovfit.peakNmsRadiusBins` | 非负整数 | 二维非极大值抑制半径，单位为网格点，当前默认0 | 配置参数 |
-| `incm.staticCovfit.maximumCandidateCount` | 正整数 | 干扰候选数配置上限，实际还受 `M-1` 限制，当前默认7 | 配置参数 |
-| `incm.localCovfit` | 结构体 | 新方法`CovFit_local`的独立参数，不覆盖旧CovFit | 配置参数 |
-| `incm.localCovfit.radiusBins` | 正标量 | 连续干扰峰搜索半径，单位为方向余弦网格间隔，默认2；不是2° | 配置参数 |
+| `incm.localCovfit.loadingRatio` | 标量 | 两种CovFit共用的Capon相对加载系数，保留原细化版默认0.001 | 配置参数 |
+| `incm.localCovfit.fitRegularization` | 标量 | 两种CovFit共用的NNLS正则项，保留原细化版默认0 | 配置参数 |
+| `incm.localCovfit.peakThresholdRatio` | 标量 | 共用局部峰相对门限，默认0.15 | 配置参数 |
+| `incm.localCovfit.peakNmsRadiusBins` | 非负整数 | 共用非极大值抑制半径，默认0 | 配置参数 |
+| `incm.localCovfit.maximumCandidateCount` | 正整数 | 共用干扰候选上限，另受`M-1`限制，默认7 | 配置参数 |
+| `incm.localCovfit` | 结构体 | 两种CovFit唯一参数入口；只有radiusBins/solver供连续细化分支使用 | 配置参数 |
+| `incm.staticCovfit` | 结构体 | 历史兼容镜像，校验时由localCovfit共用字段同步，不再独立调参 | 兼容字段 |
+| `initialCandidateNodes` | `N×2` | 两种CovFit在细化分支之前的相同候选，前D行为期望字典 | 方法诊断 |
+| `refinementApplied` | 逻辑标量 | 是否执行连续干扰方向优化，普通版false、细化版true | 方法诊断 |
+| `incm.localCovfit.radiusBins` | 正标量 | 连续干扰峰搜索半径，UPA按方向余弦间隔，ULA按共用角网格步长；默认2不是2°，2001点ULA约0.180° | 配置参数 |
 | `incm.localCovfit.solver` | 结构体 | 局部细化的迭代上限、最优性/约束/步长及接受容差 | 配置参数 |
 | `relativeKktResidual` | 非负标量 | 非负功率拟合的相对KKT违反程度，局部方法超过阈值时报错 | 数值诊断 |
 | `p_k, c_k` | 网格矩阵 | 残余Capon谱和时序增强谱 | 估计量或状态量 |

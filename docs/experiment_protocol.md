@@ -42,6 +42,30 @@ WCO不确定集半径在扫描前固定，不能在每个抖动点使用真值�
 代表性方法在当前场景中出现性能退化”的表述，不能据此声称表2-1中的所有
 方法都已被逐一验证为失效。
 
+## 实验8：输入SNR扫描
+
+入口为`exp08_classic_method_snr_sweep(cfg)`，与实验6/7共享经典方法、配对快拍、
+簇bootstrap和导出流程，但使用独立实验号8及`classicSnrMethodNames`方法组合，
+不自动加入`run_all`。支持当前UPA与沿x轴ULA。
+
+- 扫描：`cfg.experiments.snrSweepDb=-10:5:30`，单位dB。
+- 固定条件：`classicSnrSnapshotCount=32`、`classicSnrJitterStdDeg=[5,5,5]`。
+  RMS表示各轴稳态标准差，不是固定姿态角，也不是三轴合成RMS。
+  这两个字段覆盖本实验内部的`timeline.L`和`attitude.stdDeg`，不修改调用者配置。
+- 干扰INR、噪声功率、名义姿态、世界方向及算法参数保持不变；只按输入SNR
+  更新期望功率。WCO半径只在扫描开始前固定标定一次。
+- 工作量：`monteCarlo.nTrials`与`periodCounts.snrSweep`共同决定实际样本数；
+  后者默认使用profile中的`sweepPeriods`。
+- 每个点内所有方法共享观测；不同点按现有子流规则使用不同随机实现。
+- 主图为输出SINR中位数随输入SNR变化；置信区间、第5百分位、增益、泄漏、
+  逐试次逐周期原始指标仍保存至MAT/CSV。
+- 默认5°抖动下，不同SNR点使用不同姿态实现，Oracle不保证逐点严格增加5 dB。
+  另做零抖动对照且固定干扰时，Oracle的输出SINR（dB）应随输入SNR按1:1斜率
+  上升。实验8只在固定RMS下扫描SNR，不能替代实验6的抖动强度扫描结论。
+
+文件前缀为`exp08_classic_method_snr_sweep`；ULA自动追加`_ULA_<Nx>x1`，
+随后追加profile。输出目录沿用`results/{raw,figures,tables,logs}`。
+
 ## `static_incm_mvdr`重构核心替换记录（2026-08-30，现名CovFit）
 
 该次替换当时保持外部方法名、方法组合配置、结果数组索引和最终标准MVDR接口不变。
@@ -66,6 +90,10 @@ WCO不确定集半径在扫描前固定，不能在每个抖动点使用真值�
 参数、移植证据与小规模核对见[主线接入记录](covfit_local_main_integration_2026-10-21.md)。
 
 ## 经典方法参数筛选协议（替换前历史协议）
+
+当前两种CovFit的纯细化消融定义见[共用前端说明](covfit_matched_ablation_2026-11-08.md)：
+以原细化版为基准统一低加载、局部峰及NNLS，只切换连续干扰方向细化。
+上方2026-08-30及2026-10-21段落保留为历史记录，不代表当前存在两套独立参数。
 
 以下内容记录旧静态Capon积分实现的历史协议，不能用于证明当前CovFit参数
 最优。参数筛选只在 `smoke` profile中进行，分别处理每周期8和64快拍。DL-MVDR、

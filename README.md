@@ -20,6 +20,13 @@
 期望区排除、局部细化和积分自动切换为一维。`Nx、Ny`均大于1时保持UPA。
 本次未扩展沿y轴ULA或单阵元算法模式；不要通过`Nx=1`启用此功能。
 
+当前ULA只使用`desiredAzElDeg`和`interfererAzElDeg`的第一列方位角，
+第二列高度角忽略（仍需为有限数）。ULA方位角范围为`[-90,90]`度，
+0度为正侧向+y、正角向+x，导向相位使用`sin(方位角)`；这不是UPA从+x
+起算的标准方位角。当前新配置标记为`cfg.array.ulaDirectionConvention="azimuth_broadside"`。
+零名义姿态下，默认源角直接为`[0,40,-55]`度；三轴抖动后仍按旋转后的
+`asin(u_x)`计算实际入射角，不会让源方向始终固定不动。
+
 ```matlab
 startup
 cfg = config("smoke");
@@ -34,8 +41,11 @@ r6 = exp06_classic_method_jitter_sweep(cfg);
 r7 = exp07_classic_method_snapshot_sweep(cfg);
 ```
 
-ULA使用`theta=asin(u_x)`等角中点网格，点数仍读`cfg.spectrum.gridSize`，
-积分采用`dtheta`，不再在二维圆盘上重复积分。ULA结果名自动增加`_ULA_9x1`，
+ULA使用`theta=asin(u_x)`等角中点网格：四种静态INCM方法统一读取
+`cfg.spectrum.ulaGridSize=2001`，步长约0.09度；两种积分采用`dtheta`，
+两种CovFit使用完全相同的节点生成候选，细化版再进行连续局部搜索。
+`temporal`仍使用`cfg.spectrum.gridSize`基础谱网格。UPA继续原二维网格，
+不受ULA专用参数影响。ULA结果名自动增加`_ULA_9x1`，
 不会覆盖原UPA图。`incm_integral_origin`为独立可选原式Rec，不替换积分`incm_integral_processed`；
 秩亏SCM下记录“不适用”和NaN，CSV同时保存有效样本数与原因。
 
@@ -43,11 +53,20 @@ ULA的球形鲁棒半径为`sqrt(cfg.beamforming.calibration.ulaSquaredRadiusSca
 比例默认0.3；这是用户授权的ULA专用设置，不随数据或SINR调参。UPA仍用原分位数标定。
 
 排除区已独立配置：UPA使用`cfg.spectrum.desiredExclusionHalfWidthDeg=25`，
-ULA使用`cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=5`。当前名义几何下，
-两个干扰都在ULA的5°排除区之外；若改回25°，两者都会被排除。
+ULA使用`cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=5`。当前新角度约定下，
+干扰40/-55度均在以0度为中心的5°或25°排除区之外。
 5°只是初始分区，不保证覆盖当前5° RMS的动态抖动。请先查看
 `cfg.derived.ulaGeometry`；它只作配置诊断，不向算法提供真实源身份。
 详细约定、文件职责和验证方法见[ULA自动降维说明](docs/automatic_ula.md)。
+
+注意：这是与论文一维角度习惯一致的平面源ULA对照模型，不再与UPA使用相同
+三维世界方向。旧MAT若没有新角度标记或独立积分参数，保留其旧投影和原网格；
+重新开展实验请使用当前`config(profile)`，不要直接把旧结果中的cfg当作新默认。
+
+ULA局部细化仍保持`cfg.incm.localCovfit.radiusBins=2`，不额外调参；其半径按
+共用网格步长计算，2001点下约为0.180度，而不是原preliminary 51点网格的约7.06度。
+实际候选网格点数、步长和细化半径均写入方法诊断，结果元数据同时记录基础谱网格
+和ULA四方法共用网格，避免把配置中的基础网格误认为CovFit实际使用的密度。
 
 四种INCM方法的当前名称为`incm_integral_origin`、`incm_integral_processed`、
 `incm_covfit`、`incm_covfit_refined`。历史名称分别为`gu_leshem2012_rec`、
@@ -259,6 +278,7 @@ result = exp02_jitter_sweep(cfg);
 - `loadedCapon.m`：对样本协方差进行尺度化对角加载，复用配置阶段缓存的二维可见域阵列流形，通过一次批量线性求解计算Capon功率谱。
 - `admissibleDirections.m`：把“位于方向余弦可见圆盘内”和“位于期望信号排除区外”合并为连续方向可接受条件。
 - `align2D.m`：在受限二维平移范围内计算当前谱与上一周期谱的归一化互相关；证据不足或候选歧义时退化为恒等对齐。
+- `useUlaComparisonGrid.m`：为ULA四种静态重构入口选择同一高密度网格；只改局部配置副本，不改变UPA或temporal。
 - `selectPeaks.m`：在增强谱上执行阈值筛选和非极大值抑制；峰数只受观测阈值和 `M-1` 上限限制，不使用真实干扰数。
 - `adaptiveQuadrature.m`：峰值邻域采用细网格，其他干扰区域采用粗网格，并为方向余弦单元分配面积权重。
 - `mergeQuadratureNodes.m`：合并细网格与粗网格中的重复或近重复节点，累计相应求积权重，避免同一区域重复积分。
@@ -266,8 +286,9 @@ result = exp02_jitter_sweep(cfg);
 ### 8.6 `+incm`：INCM重构
 
 - `reconstruct.m`：静态和时序INCM的统一入口。静态方法使用当前周期Capon谱和均匀求积；时序方法依次进行谱对齐、非负时序稀疏增强、峰值选择、自适应求积和结构投影。该文件还负责噪声功率估计、期望区排除和可选训练序列投影。
-- `upaCovfit.m`：经典实验中的 `incm_covfit` 实际重构核心。它从加载Capon谱提取少量期望/干扰候选，用非负协方差拟合估计候选功率，随后删除期望候选项并形成干扰加噪声协方差；不读取真实方向、真实干扰数或真实INCM。
-- `localCovfit.m`：实验6/7中`incm_covfit_refined`的重构核心；采用低加载、局部干扰峰、2格有界连续细化和零正则NNLS，期望拟合字典及最终名义参考不细化，另检查功率解KKT。
+- `upaCovfit.m`：`incm_covfit`入口，调用共用实现并关闭连续方向细化，不再使用旧强加载/强正则流程。
+- `localCovfit.m`：两种CovFit共用核心；以原细化版为基准，采用相同低加载、局部干扰峰、噪声估计及零正则NNLS，唯一分支是是否执行连续干扰方向细化；期望字典和最终名义参考不校正。
+- `covfitFrontEnd.m`：两种CovFit共用期望候选与噪声估计，替代过去为取这些量而额外运行一次旧功率拟合的流程。
 - `fitNonnegativePowers.m`：把Hermitian协方差映射到保持Frobenius范数的实向量空间，并以带L2正则项的非负最小二乘估计候选空间功率。
 - `temporalProx.m`：求解非负逐元素时序稀疏目标。利用目标函数的分段凸结构枚举精确候选点，不依赖CVX。
 - `projectStructure.m`：对原始INCM依次执行Hermitian化、半正定投影、特征值下限和可配置收缩，保证输出有限、Hermitian且半正定。
@@ -402,7 +423,8 @@ NSB使用配置中的标称期望和干扰方向；NLMS与RLS使用已知期望Q
 历史名称为`static_incm_mvdr`和`CovFit`，现统一为`incm_covfit`，旧名仍兼容。其内部重构自2026-08-30起已由“期望区外稠密Capon
 均匀积分”替换为“UPA候选提取、非负协方差拟合、删除期望候选项”，最终
 仍接标准MVDR，因此不会把鲁棒权值收益混入INCM重构收益。CovFit专用参数
-集中在 `cfg.incm.staticCovfit`。除Oracle外，所有方法均不能读取真实姿态、真实方向
+当前统一集中在 `cfg.incm.localCovfit`，`staticCovfit`只保留兼容镜像。
+除Oracle外，所有方法均不能读取真实姿态、真实方向
 或真实INCM。
 
 ## 10.2 经典方法参数筛选与锁定验证
@@ -468,11 +490,55 @@ snapshotResult = exp07_classic_method_snapshot_sweep(cfg);
 前两页PPT大纲、论文依据、公式边界及完整参数说明见
 [组会大纲与实验说明](docs/incm_presentation_outline_and_experiments_2026-10-20.md)。
 
-局部细化版使用独立参数`cfg.incm.localCovfit`，原CovFit继续使用
-`cfg.incm.staticCovfit`，二者不会互相覆盖。方法标识区分大小写。
+### 实验8：固定32快拍、三轴各5° RMS抖动，扫描输入SNR
+
+```matlab
+startup;
+cfg = config("preliminary"); % 也可用"smoke"先验证流程
+% 可只选部分方法；不修改实验6/7的方法组合。
+% cfg.experiments.classicSnrMethodNames = ["oracle", "incm_integral_origin", ...
+%     "incm_integral_processed", "incm_covfit", "incm_covfit_refined"];
+snrResult = exp08_classic_method_snr_sweep(cfg);
+```
+
+`config.m`中的实验8专用参数为：
+
+| 参数 | 默认值与作用 |
+|---|---|
+| `cfg.experiments.snrSweepDb` | `-10:5:30`，单阵元输入SNR，单位dB |
+| `cfg.experiments.classicSnrSnapshotCount` | `32`，固定每周期快拍数 |
+| `cfg.experiments.classicSnrJitterStdDeg` | `[5,5,5]`，固定各轴稳态RMS为5°，不是每周期角度固定5° |
+| `cfg.experiments.classicSnrMethodNames` | 独立选择比较方法，默认与实验6/7当前完整组合一致 |
+| `cfg.experiments.periodCounts.snrSweep` | 每个试次使用的周期数，由profile的`sweepPeriods`决定 |
+
+实验8会在自身配置副本上覆盖`timeline.L`和`attitude.stdDeg`，不会修改调用者
+配置或实验6/7的运行条件。每个点只改变期望信号功率
+`P_s=noisePower*10^(SNR/10)`；干扰INR、噪声功率、几何和算法参数保持不变，
+WCO半径在扫描前固定。结果MAT中的`cfg`保存固定条件，逐点SNR见`scanPoints`；
+其中`cfg.signal.snrDb`仍是扫描前的基准值，不代表所有点都用了同一SNR。
+各SNR点按原有规则使用不同随机姿态实现，故5°抖动下Oracle曲线不保证每一步
+严格增加5 dB。若单独将实验8抖动改回零，固定干扰时Oracle输出SINR的dB值
+才应随输入SNR按1:1斜率增加，而不是水平线。
+
+`experiments/exp08_classic_method_snr_sweep.m`是公开入口；
+`src/+uav/+experiment/runClassicSnrSweep.m`对接共享扫描器`runClassicSweep.m`；
+`tests/TestClassicSnrSweep.m`检查参数、固定条件、配对观测及文件导出。
+与实验6/7一样，实验8不自动加入`run_all`。
+
+输出为`results/figures/exp08_classic_method_snr_sweep_<profile>.{fig,pdf,png}`，
+以及`results/raw`下的MAT、`results/tables`下的CSV和`results/logs`下的JSON。
+ULA结果名额外包含`_ULA_9x1`等阵列形状，例如
+`exp08_classic_method_snr_sweep_ULA_9x1_preliminary.fig`。
+同阵列、同profile重跑会按`cfg.output.overwrite`覆盖同名实验8结果，不覆盖实验6/7。
+
+两种CovFit以原细化版为基准，共用唯一参数入口`cfg.incm.localCovfit`。
+`loadingRatio=1e-3`、`fitRegularization=0`，阈值0.15、NMS半径0、候选上限7；
+`radiusBins`与`solver`只供连续细化使用。`staticCovfit`校验后同步为兼容镜像，
+请不要通过它给普通版单独调参。方法标识区分大小写。
 两种CovFit都固定相同名义期望导向、接标准MVDR，`incm_integral_processed`与`temporal`不改。
 移植来源、参数、历史别名、小规模一致性结果见
 [局部细化主线接入记录](docs/covfit_local_main_integration_2026-10-21.md)。
+当前纯细化消融定义及变更边界见[CovFit共用前端与细化开关说明](docs/covfit_matched_ablation_2026-11-08.md)。
 
 ## 11. 结果文件
 

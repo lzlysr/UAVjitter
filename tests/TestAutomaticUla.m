@@ -23,7 +23,8 @@ classdef TestAutomaticUla < matlab.unittest.TestCase
             testCase.verifyEqual(uav.config.validate(cfg),cfg);
         end
         function upaGridAndCaponRemainUnchanged(testCase)
-            cfg=config('smoke');g=cfg.derived.spectrumGrid;
+            cfg=config('smoke');cfg.array.Nx=3;cfg.array.Ny=3;
+            cfg=uav.config.validate(cfg);g=cfg.derived.spectrumGrid;
             axis=linspace(-1,1,cfg.spectrum.gridSize);[x,y]=meshgrid(axis,axis);
             testCase.verifyEqual(g.xiX,x);testCase.verifyEqual(g.xiY,y);
             testCase.verifyEqual(g.cellArea,(axis(2)-axis(1))^2);
@@ -41,7 +42,7 @@ classdef TestAutomaticUla < matlab.unittest.TestCase
             testCase.verifyEqual(uav.spectrum.admissibleDirections(nodes,cfg),[false;false;true]);
         end
         function rawRecMatchesIndependentAngularSum(testCase)
-            cfg=ulaConfig();g=cfg.derived.spectrumGrid;Rx=diag(1:9);
+            cfg=ulaConfig();g=cfg.derived.ulaIntegrationGrid;Rx=diag(1:9);
             keep=uav.spectrum.admissibleDirections(g.directionCosines.',cfg);
             A=g.manifold(:,keep);
             expected=zeros(9);
