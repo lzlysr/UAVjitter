@@ -9,10 +9,12 @@ function [Rhat,diagnostics] = integrateUpaBatch(Rx,cfg,gridSize,rule,settings,me
 %   dOmega=dphi dz，dxi_x dxi_y=|z|dphi dz；两测度共用所有节点和Capon值。
 %   不在圆盘边缘直接除以零，也不对Jacobian人为裁剪。
 %   多测度时Rhat第四维对应measures，diagnostics也按测度排列。
+%   azel_*规则直接均匀采样方位/高度角；angle_product表示dphi dalpha，
+%   仅作为另一种估计器的诊断，不能把它与dOmega无条件视为同一功率密度。
 if nargin<6,measures="dxi_x_dxi_y";end
 measures=reshape(string(measures),1,[]);measureCount=numel(measures);
-if ~all(ismember(measures,["dxi_x_dxi_y","solid_angle"]))
-    error('uav:incm:InvalidMeasure','仅支持方向余弦面积与立体角测度。');
+if ~all(ismember(measures,["dxi_x_dxi_y","solid_angle","angle_product"]))
+    error('uav:incm:InvalidMeasure','仅支持方向余弦面积、立体角及角度乘积测度。');
 end
 if cfg.array.Nx<=1 || cfg.array.Ny<=1
     error('uav:incm:UpaOnly','本网格诊断只支持二维UPA。');
@@ -22,19 +24,27 @@ if size(Rx,1)~=M || size(Rx,2)~=M || any(~isfinite(Rx),'all')
     error('uav:incm:InvalidBatch','协方差尺寸不匹配或包含非有限值。');
 end
 surfaceRule=ismember(rule,["surface_midpoint","surface_shifted"]);
+azelRule=ismember(rule,["azel_midpoint","azel_shifted"]);
+if any(measures=="angle_product") && ~azelRule
+    error('uav:incm:InvalidAngleRule','角度乘积测度必须使用azel_*规则。');
+end
 if rule=="endpoint"
     h=2/(gridSize-1); axisValues=linspace(-1,1,gridSize);
 elseif rule=="midpoint"
     h=2/gridSize; axisValues=-1+h/2+(0:gridSize-1)*h;
-elseif surfaceRule
-    h=[2*pi/gridSize,1/gridSize];
+elseif surfaceRule || azelRule
+    if azelRule,h=[2*pi/gridSize,pi/(2*gridSize)];else,h=[2*pi/gridSize,1/gridSize];end
     phi=-pi+h(1)/2+(0:gridSize-1)*h(1);
-    if rule=="surface_shifted",phi=phi-h(1)/2;end
-    zAxis=-1+h(2)/2+(0:gridSize-1)*h(2);
+    if ismember(rule,["surface_shifted","azel_shifted"]),phi=phi-h(1)/2;end
+    if azelRule
+        elevation=-pi/2+h(2)/2+(0:gridSize-1)*h(2);zAxis=sin(elevation);
+    else
+        zAxis=-1+h(2)/2+(0:gridSize-1)*h(2);
+    end
 else
     error('uav:incm:InvalidQuadrature','不支持的求积规则。');
 end
-if ~surfaceRule && any(measures~="dxi_x_dxi_y")
+if ~surfaceRule && ~azelRule && any(measures~="dxi_x_dxi_y")
     error('uav:incm:SingularBoundaryRule','立体角积分请使用surface_*规则避免边缘奇异性。');
 end
 % 阵元顺序与steeringUPA的vx kron vy相同。只保存正半平面的阵元差。
@@ -60,7 +70,7 @@ end
 moments=zeros(1+2*Q,B,measureCount); includedCount=0;includedArea=zeros(1,measureCount);
 for first=1:settings.nodeChunkSize:gridSize^2
     indices=first:min(first+settings.nodeChunkSize-1,gridSize^2);
-    if surfaceRule
+    if surfaceRule || azelRule
         % z坐标先变化，方位角是周期坐标；没有重复的正负pi节点。
         az=phi(floor((indices-1)/gridSize)+1).';
         z=zAxis(mod(indices-1,gridSize)+1).';r=sqrt(1-z.^2);
@@ -74,7 +84,16 @@ for first=1:settings.nodeChunkSize:gridSize^2
     if isempty(nodes),continue;end
     weights=zeros(size(nodes,1),measureCount);
     for m=1:measureCount
-        if ~surfaceRule
+        if azelRule
+            % dOmega=cos(alpha)dphi dalpha；du dv=|sin(alpha)|dOmega。
+            if measures(m)=="angle_product"
+                weights(:,m)=prod(h);
+            elseif measures(m)=="solid_angle"
+                weights(:,m)=r(keep)*prod(h);
+            else
+                weights(:,m)=r(keep).*abs(z(keep))*prod(h);
+            end
+        elseif ~surfaceRule
             weights(:,m)=h^2;
         elseif measures(m)=="solid_angle"
             weights(:,m)=prod(h);

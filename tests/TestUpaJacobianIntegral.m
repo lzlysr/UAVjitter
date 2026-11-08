@@ -8,6 +8,24 @@ classdef TestUpaJacobianIntegral < matlab.unittest.TestCase
         end
     end
     methods(Test)
+        function azimuthElevationUsesConsistentDensity(t)
+            % 等方位/高度角与等方位/z坐标必须给出相同立体角积分。
+            c=config("smoke");c.array.Nx=3;c.array.Ny=2;
+            c.spectrum.desiredExclusionHalfWidthDeg=0;c=uav.config.validate(c);
+            s=c.experiments.upaGridConvergence;G=401;M=c.derived.M;
+            [R,d]=uav.incm.integrateUpaBatch(eye(M),c,G,"azel_midpoint",s, ...
+                ["dxi_x_dxi_y","solid_angle","angle_product"]);
+            reference=uav.incm.integrateUpaBatch(eye(M),c,G,"surface_midpoint",s, ...
+                ["dxi_x_dxi_y","solid_angle"]);
+            t.verifyEqual(d(1).includedArea,pi,'AbsTol',1e-4);
+            t.verifyEqual(d(2).includedArea,2*pi,'AbsTol',1e-4);
+            t.verifyEqual(d(3).includedArea,pi^2,'AbsTol',1e-10);
+            for m=1:2
+                t.verifyLessThan(norm(R(:,:,1,m)-reference(:,:,1,m),'fro')/norm(reference(:,:,1,m),'fro'),3e-5);
+            end
+            % 保持同一个Capon数值却换成角度乘积测度，会改变估计器而非仅换坐标。
+            t.verifyGreaterThan(norm(R(:,:,1,3)/trace(R(:,:,1,3))-R(:,:,1,2)/trace(R(:,:,1,2)),'fro'),.05);
+        end
         function fullHemisphereAnalyticIntegral(t)
             c=config("smoke");c.array.Nx=3;c.array.Ny=2;
             c.spectrum.desiredExclusionHalfWidthDeg=0;c=uav.config.validate(c);

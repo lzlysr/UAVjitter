@@ -1,5 +1,9 @@
 # UPA原始Rec的Jacobian／立体角测度诊断
 
+后续关于密度/测度匹配、12801级网格、方位—高度角交叉验证及排除区控制，
+见[二维积分迁移与原理控制报告](upa_integral_measure_and_mechanism_2026-11-08.md)。
+下文保留本轮原始实验设置，不将后续控制实验混入本轮配对比较。
+
 ## 分支与研究边界
 
 研究分支：`codex/upa-integral-jacobian-study`。
