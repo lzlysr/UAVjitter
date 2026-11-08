@@ -562,6 +562,10 @@ UPA原始积分方法的独立网格收敛诊断：`startup; diagnose_upa_integr
 设置集中在`cfg.experiments.upaGridConvergence`，只研究`incm_integral_origin`，
 不运行processed方法、不覆盖实验8。详见[网格收敛验证说明](docs/upa_integral_grid_convergence_2026-11-08.md)。
 
+研究分支的Jacobian单变量诊断：`startup; diagnose_upa_jacobian("preliminary")`。
+同一组球面节点对比方向余弦面积与立体角两种测度，设置位于
+`cfg.experiments.upaJacobianStudy`。详见[Jacobian诊断说明](docs/upa_jacobian_study_2026-11-08.md)。
+
 `smoke`运行通过只能证明模型、算法、测试和结果导出链能够一致执行，不能证明拟研究方法优于基线。
 
 只有当 `preliminary` 或 `paper` 的配对蒙特卡洛结果及置信区间支持差异时，才能写“时序稀疏INCM提高了输出SINR或稳定性”。如果差异不显著，应表述为“完成了模型和初步算法实现，并观察到某种趋势”。所有结论都只适用于当前配置的窄带、单径、普通邻区同频干扰模型及其参数扫描范围。
