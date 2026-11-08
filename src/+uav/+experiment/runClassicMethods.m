@@ -89,19 +89,17 @@ for methodIndex = 1:methodCount
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
                 "wco", safeObservation.Rx, aRef, cfg);
             methodDiagnostics = struct('beamforming', beamformingDiagnostics);
-        case {"incm_integral_processed", "incm_integral_origin"}
-            % 直接复用原有static积分重构，不更改谱底、求积或结构处理。
-            % 此经典对照接标准MVDR，与CovFit保持相同的名义响应约束。
-            % 主线runMethods中的static仍接原鲁棒求解器，保持其定义不变。
+        case {"incm_integral_processed", "incm_integral_origin", "incm_capon_point", "incm_urglq"}
+            % 重构方法全部接固定名义导向与标准MVDR，不叠加鲁棒求权增益。
             try
                 [estimatedIncm, ~, reconstructionDiagnostics] = ...
                     uav.incm.reconstruct(method, safeObservation, [], cfg);
             catch exception
-                if method=="incm_integral_origin" && ...
+                if ismember(method,["incm_integral_origin","incm_capon_point","incm_urglq"]) && ...
                         strcmp(exception.identifier,'uav:incm:SingularSampleCovariance')
-                    % 未加载原始Rec在秩亏SCM下不适用；不伪逆、不补加载。
+                    % 未加载Capon在秩亏SCM下不适用；不伪逆、不静默补加载。
                     methodStatus(methodIndex) = "not-applicable";
-                    notApplicableReason(methodIndex) = "原始Rec要求可逆SCM；当前矩阵秩亏或数值奇异";
+                    notApplicableReason(methodIndex) = "该Capon重构要求可逆协方差；当前矩阵秩亏或数值奇异";
                     sinrLinear(methodIndex)=NaN; desiredGain(methodIndex)=NaN;
                     interferenceLeakage(methodIndex)=NaN; weights(:,methodIndex)=NaN;
                     runtimeSec(methodIndex)=toc(methodTimer);
@@ -183,7 +181,8 @@ end
 
 function validateMethodSelection(methodNames)
 allowed = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
-    "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin"];
+    "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin", ...
+    "incm_capon_point","incm_urglq"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowed))

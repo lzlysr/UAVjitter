@@ -1,6 +1,6 @@
 function [RinHat, nextState, diagnostics] = reconstruct(method, obs, priorState, cfg)
 %RECONSTRUCT 静态及时序INCM重构的统一入口。
-%   method     - 四种incm_*名称或temporal；历史名称由统一映射兼容；
+%   method     - 六种incm_*名称或temporal；历史名称由统一映射兼容；
 %   obs        - 非Oracle白名单观测，至少含M×M样本协方差Rx；
 %   priorState - 上一周期的估计谱与对齐诊断，静态方法可传[]；
 %   RinHat     - M×M重构干扰加噪声协方差；
@@ -21,6 +21,13 @@ switch method
         [RinHat, nextState, diagnostics] = reconstructStatic(obs, cfg);
     case "temporal"
         [RinHat, nextState, diagnostics] = reconstructTemporal(obs, priorState, cfg);
+    case {"incm_capon_point","incm_urglq"}
+        if method=="incm_capon_point"
+            [RinHat,diagnostics]=uav.incm.caponPoint(obs,cfg);
+        else
+            [RinHat,diagnostics]=uav.incm.urglq(obs,cfg);
+        end
+        nextState=struct('method',method);
     case {"incm_covfit","incm_covfit_refined"}
         if method=="incm_covfit"
             [RinHat,diagnostics]=uav.incm.upaCovfit(obs,cfg);
@@ -42,7 +49,7 @@ switch method
         nextState = struct('method',"incm_integral_origin");
     otherwise
         error('uav:incm:UnsupportedMethod', ...
-            '支持四种incm_*方法及temporal重构。');
+            '支持六种incm_*方法及temporal重构。');
 end
 diagnostics.method=method;
 diagnostics.desiredExclusionHalfWidthDeg=uav.spectrum.desiredExclusionHalfWidth(cfg);

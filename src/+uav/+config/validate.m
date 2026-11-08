@@ -371,6 +371,7 @@ if cfg.incm.noiseFloorRatio > 1
 end
 validateNonnegativeFiniteScalar(cfg.incm.lambdaS, 'incm.lambdaS');
 validateNonnegativeFiniteScalar(cfg.incm.lambdaT, 'incm.lambdaT');
+validateCaponReconstruction(cfg);
 if ~isfield(cfg.incm, 'staticCovfit') || ~isstruct(cfg.incm.staticCovfit)
     error('uav:config:InvalidAlgorithmParameter', ...
         'incm.staticCovfit must be a configuration structure.');
@@ -475,6 +476,48 @@ validateAlgorithmIntegerScalar(cfg.beamforming.calibration.substream, ...
     'beamforming.calibration.substream', true);
 end
 
+function validateCaponReconstruction(cfg)
+% 新字段可缺省以重放历史MAT；只要提供就检查，选用新方法时另查必需字段。
+if isfield(cfg.incm,'caponCandidates')
+    s=cfg.incm.caponCandidates;
+    required={'loadingRatio','peakThresholdRatio','peakNmsRadiusBins','maximumCandidateCount'};
+    if ~isstruct(s) || ~all(isfield(s,required))
+        error('uav:config:InvalidAlgorithmParameter','caponCandidates候选参数不完整。');
+    end
+    validatePositiveFiniteScalar(s.loadingRatio,'incm.caponCandidates.loadingRatio');
+    validatePositiveFiniteScalar(s.peakThresholdRatio,'incm.caponCandidates.peakThresholdRatio');
+    if s.peakThresholdRatio>1
+        error('uav:config:InvalidAlgorithmParameter','干扰峰门限比例必须不超过1。');
+    end
+    validateAlgorithmIntegerScalar(s.peakNmsRadiusBins,'incm.caponCandidates.peakNmsRadiusBins',false);
+    validateAlgorithmIntegerScalar(s.maximumCandidateCount,'incm.caponCandidates.maximumCandidateCount',true);
+end
+for name={'caponPoint','urglq'}
+    if ~isfield(cfg.incm,name{1}),continue;end
+    s=cfg.incm.(name{1});
+    if ~isstruct(s) || ~isfield(s,'powerLoadingRatio')
+        error('uav:config:InvalidAlgorithmParameter','新增Capon方法缺少powerLoadingRatio。');
+    end
+    validateNonnegativeFiniteScalar(s.powerLoadingRatio,['incm.' name{1} '.powerLoadingRatio']);
+end
+if isfield(cfg.incm,'urglq')
+    s=cfg.incm.urglq;
+    if ~all(isfield(s,{'quadratureOrder','ulaHalfWidthDeg','upaAzElHalfWidthDeg','upaMeasure'}))
+        error('uav:config:InvalidAlgorithmParameter','URGLQ局部求积参数不完整。');
+    end
+    validateAlgorithmIntegerScalar(s.quadratureOrder,'incm.urglq.quadratureOrder',true);
+    validatePositiveFiniteScalar(s.ulaHalfWidthDeg,'incm.urglq.ulaHalfWidthDeg');
+    validateFiniteVector(s.upaAzElHalfWidthDeg,2,'incm.urglq.upaAzElHalfWidthDeg');
+    if s.ulaHalfWidthDeg>90 || any(s.upaAzElHalfWidthDeg<=0) || ...
+            s.upaAzElHalfWidthDeg(1)>180 || s.upaAzElHalfWidthDeg(2)>90
+        error('uav:config:InvalidAlgorithmParameter','URGLQ局部角域半宽超出合法角度范围。');
+    end
+    if ~isstring(s.upaMeasure) || ~isscalar(s.upaMeasure) || ismissing(s.upaMeasure) || s.upaMeasure~="solid_angle"
+        error('uav:config:InvalidAlgorithmParameter','当前URGLQ的UPA扩展明确使用solid_angle。');
+    end
+end
+end
+
 function validateClassicBeamforming(cfg)
 %VALIDATECLASSICBEAMFORMING 校验经典基线的可复现实验参数。
 classic = cfg.beamforming.classic;
@@ -515,7 +558,8 @@ expectedMethods = ["oracle", "frozen", "scm", "dl", "incm_integral_processed", "
 allowedExp02Methods = expectedMethods;
 allowedClassicMethods = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", ...
     "nlms", "rls", "pi", "dl_mvdr", "esp", "wco", ...
-    "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin"];
+    "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin", ...
+    "incm_capon_point","incm_urglq"];
 expectedAblations = ["full", "lambda_t_zero", "identity_alignment", ...
     "uniform_quadrature", "no_structure", "pilot_projection"];
 if ~isstring(cfg.experiments.methodNames) || ...
@@ -548,6 +592,17 @@ end
 if any(ismember(selectedClassicMethods,["incm_covfit","incm_covfit_refined"])) && ...
         ~isfield(cfg.incm,'localCovfit')
     experimentError('选择任一种CovFit时必须提供共用incm.localCovfit配置。');
+end
+newMethods=["incm_capon_point","incm_urglq"];
+if any(ismember(selectedClassicMethods,newMethods)) && ...
+        ~all(isfield(cfg.incm,{'caponCandidates','localCovfit'}))
+    experimentError('新增Capon方法需要caponCandidates配置及共用候选/噪声前端配置。');
+end
+for index=1:numel(newMethods)
+    fields={"caponPoint","urglq"};
+    if any(selectedClassicMethods==newMethods(index)) && ~isfield(cfg.incm,fields{index})
+        experimentError('所选新增方法缺少相应incm参数。');
+    end
 end
 snapshotMethods = reshape(cfg.experiments.classicSnapshotMethodNames, 1, []);
 if ~isstring(cfg.experiments.classicSnapshotMethodNames) || ...

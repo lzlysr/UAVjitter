@@ -41,9 +41,10 @@ r6 = exp06_classic_method_jitter_sweep(cfg);
 r7 = exp07_classic_method_snapshot_sweep(cfg);
 ```
 
-ULA使用`theta=asin(u_x)`等角中点网格：四种静态INCM方法统一读取
+ULA使用`theta=asin(u_x)`等角中点网格：六种静态INCM方法的候选/扫描统一读取
 `cfg.spectrum.ulaGridSize=2001`，步长约0.09度；两种积分采用`dtheta`，
 两种CovFit使用完全相同的节点生成候选，细化版再进行连续局部搜索。
+新增点Capon在该网格上选峰，URGLQ在同样候选附近另生成局部高斯节点。
 `temporal`仍使用`cfg.spectrum.gridSize`基础谱网格。UPA继续原二维网格，
 不受ULA专用参数影响。ULA结果名自动增加`_ULA_9x1`，
 不会覆盖原UPA图。`incm_integral_origin`为独立可选原式Rec，不替换积分`incm_integral_processed`；
@@ -52,7 +53,7 @@ ULA使用`theta=asin(u_x)`等角中点网格：四种静态INCM方法统一读�
 ULA的球形鲁棒半径为`sqrt(cfg.beamforming.calibration.ulaSquaredRadiusScale*M)`，
 比例默认0.3；这是用户授权的ULA专用设置，不随数据或SINR调参。UPA仍用原分位数标定。
 
-排除区已独立配置：UPA使用`cfg.spectrum.desiredExclusionHalfWidthDeg=25`，
+排除区已独立配置：UPA读取`cfg.spectrum.desiredExclusionHalfWidthDeg`（保留用户当前5度设置），
 ULA使用`cfg.spectrum.ulaDesiredExclusionHalfWidthDeg=5`。当前新角度约定下，
 干扰40/-55度均在以0度为中心的5°或25°排除区之外。
 5°只是初始分区，不保证覆盖当前5° RMS的动态抖动。请先查看
@@ -68,10 +69,13 @@ ULA局部细化仍保持`cfg.incm.localCovfit.radiusBins=2`，不额外调参；
 实际候选网格点数、步长和细化半径均写入方法诊断，结果元数据同时记录基础谱网格
 和ULA四方法共用网格，避免把配置中的基础网格误认为CovFit实际使用的密度。
 
-四种INCM方法的当前名称为`incm_integral_origin`、`incm_integral_processed`、
-`incm_covfit`、`incm_covfit_refined`。历史名称分别为`gu_leshem2012_rec`、
+六种静态INCM方法的当前名称为`incm_integral_origin`、`incm_integral_processed`、
+`incm_covfit`、`incm_covfit_refined`、`incm_capon_point`、`incm_urglq`。
+前四种的历史名称分别为`gu_leshem2012_rec`、
 `static`、`CovFit`、`CovFit_local`，仍可作为输入；结果统一保存新名称。
 历史`static_incm_mvdr`也映射为`incm_covfit`。同义新旧名同时选择会被拒绝。
+点Capon和URGLQ的公式、UPA扩展边界、参数与实验6/7/8运行示例见
+[新增两种Capon重构对照说明](docs/capon_point_and_urglq.md)。
 
 运行某个实验：
 ```matlab
@@ -282,6 +286,9 @@ result = exp02_jitter_sweep(cfg);
 - `selectPeaks.m`：在增强谱上执行阈值筛选和非极大值抑制；峰数只受观测阈值和 `M-1` 上限限制，不使用真实干扰数。
 - `adaptiveQuadrature.m`：峰值邻域采用细网格，其他干扰区域采用粗网格，并为方向余弦单元分配面积权重。
 - `mergeQuadratureNodes.m`：合并细网格与粗网格中的重复或近重复节点，累计相应求积权重，避免同一区域重复积分。
+- `interferenceCandidates.m`：为点Capon和URGLQ提供相同观测峰及噪声估计，复用已有局部峰前端，不拟合功率、不读取真实干扰方向或数量。
+- `caponAtDirections.m`：在指定流形列读取Capon功率，加载必须显式配置；未加载SCM秩亏时不使用伪逆。
+- `urglqQuadrature.m`：ULA局部区间三点高斯求积；UPA局部方位/高度矩形3×3求积并乘高度角余弦。处理重叠域、方位周期边界和负半球裁剪。
 
 ### 8.6 `+incm`：INCM重构
 
@@ -289,6 +296,8 @@ result = exp02_jitter_sweep(cfg);
 - `upaCovfit.m`：`incm_covfit`入口，调用共用实现并关闭连续方向细化，不再使用旧强加载/强正则流程。
 - `localCovfit.m`：两种CovFit共用核心；以原细化版为基准，采用相同低加载、局部干扰峰、噪声估计及零正则NNLS，唯一分支是是否执行连续干扰方向细化；期望字典和最终名义参考不校正。
 - `covfitFrontEnd.m`：两种CovFit共用期望候选与噪声估计，替代过去为取这些量而额外运行一次旧功率拟合的流程。
+- `caponPoint.m`：`incm_capon_point`入口，只取候选峰上的Capon功率作离散源外积求和，再加估计噪声单位阵；不乘积分面积、不作NNLS或连续细化。
+- `urglq.m`：`incm_urglq`入口，局部干扰角域积分加高斯求积；不采用论文的期望投影及期望导向校正。UPA版本是明确的二维扩展，不是完整原论文复现。
 - `fitNonnegativePowers.m`：把Hermitian协方差映射到保持Frobenius范数的实向量空间，并以带L2正则项的非负最小二乘估计候选空间功率。
 - `temporalProx.m`：求解非负逐元素时序稀疏目标。利用目标函数的分段凸结构枚举精确候选点，不依赖CVX。
 - `projectStructure.m`：对原始INCM依次执行Hermitian化、半正定投影、特征值下限和可配置收缩，保证输出有限、Hermitian且半正定。
@@ -398,12 +407,13 @@ result = exp02_jitter_sweep(cfg);
 
 ## 10.1 独立经典方法退化实验
 
-经典方法实验支持以下14种方法标识：
+经典方法实验支持以下16种方法标识：
 
 ```matlab
 ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", "rls", ...
  "pi", "dl_mvdr", "esp", "wco", "incm_integral_origin", ...
- "incm_integral_processed", "incm_covfit", "incm_covfit_refined"]
+ "incm_integral_processed", "incm_covfit", "incm_covfit_refined", ...
+ "incm_capon_point", "incm_urglq"]
 ```
 
 可以在调用前自由选择任意非空且不重复的组合，程序保持用户给出的顺序：
@@ -463,8 +473,8 @@ WCO候选若使离线标定半径达到或超过参考导向矢量范数，将�
 
 ## 10.3 汇报用的两种INCM路线对照
 
-实验6默认组合现为Oracle、DL、ESP、WCO、`incm_integral_processed`和
-`incm_covfit_refined`（CovFit＋局部细化）。实验7使用相同默认组合扫描快拍数：
+实验6默认组合为Oracle、DL、ESP、WCO及六种静态INCM方法（原始积分、
+处理后积分、CovFit、细化CovFit、点Capon和URGLQ局部积分）。实验7使用相同默认组合扫描快拍数：
 
 ```matlab
 startup;
@@ -479,10 +489,10 @@ snapshotResult = exp07_classic_method_snapshot_sweep(cfg);
 `snapshotSweep=32:32:1024`。可在同一配置入口自行调整。
 
 新增的经典`incm_integral_processed`直接复用原积分重构器，再接与CovFit相同的标准MVDR。
-原主线实验中的`incm_integral_processed`仍接原鲁棒权值接口，未改变。两张图默认不包含原式Rec，
-可显式加入`incm_integral_origin`；不能把处理后积分方法当作原论文Rec的完整复现。
+原主线实验中的`incm_integral_processed`仍接原鲁棒权值接口，未改变。默认组合包含原式Rec，
+可按需在config中删减；不能把处理后积分或本工程URGLQ子方法当作原论文的完整复现。
 
-图例使用四种`incm_*`新标识（下划线按原文显示）；输出在`results/figures`
+图例使用各自`incm_*`标识（下划线按原文显示）；输出在`results/figures`
 下的`exp06_classic_method_jitter_sweep_<profile>`与
 `exp07_classic_method_snapshot_sweep_<profile>`，均有FIG/PDF/PNG，另存
 完整MAT、CSV和日志。相同profile重跑会覆盖工程内同名结果。
