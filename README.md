@@ -226,7 +226,42 @@ D:\workspace\UAVjitter\
 姿态抖动强度扫描。在每个扫描点的相同随机实现上比较所选方法的输出
 SINR、期望方向增益和干扰泄漏，统计中位数、低分位数及配对置信区间；
 同时计算与方法无关的期望信号归一化导向矢量失配，并以三轴共同抖动
-RMS为横轴输出中位数及5%/95%试次分位范围。
+RMS为横轴输出空心箱线图。每个箱子的样本为各独立试次的“跨周期失配
+中位数”，不是把所有时间相关周期混在一起。箱体为25%–75%分位，中线
+为中位数；须为距箱体不超过1.5倍四分位距的最远实际样本，超出的样本
+以小点显示。须不是置信区间；MAT/CSV仍保留原有5%/95%分位统计。
+
+样式集中在 `config.m` 的 `cfg.plot.exp02Box`：`colors` 为箱体颜色
+（一行RGB统一配色，多行RGB循环配色），`boxWidthRatio` 为相对扫描步长
+的箱宽，`figurePosition` 为画布尺寸，`whiskerIqrMultiplier` 为须的IQR
+倍数。`yLimits=[]` 时自动覆盖所有绘图样本；归一化相对范数误差可能
+超过1，不能误认为必须截断到[0,1]。坐标轴和标签统一沿用
+`cfg.plot.fontSize`。默认不连接各箱子的
+中位数，不绘制背景网格。绘图区上方仅显示“箱体：25%–75%分位”一项
+中文图例，字号沿用 `cfg.plot.fontSize`；中位线、须和离群点仍正常绘制。
+零抖动分布全为零时箱体退化为
+零处短横线，这是正确的统计结果。
+
+继续从原入口 `exp02_jitter_sweep(cfg)` 运行，箱线图直接替换原失配图，
+沿用 `exp02_jitter_sweep_<profile>` 的结果文件名（ULA保留原有阵列后缀
+规则）。`cfg.output.overwrite=true` 时按既有流程覆盖同名结果，不新增
+单独的重绘入口或绘图后缀。MAT同时保存箱线统计，绘图函数位于
+`src/+uav/+plot/jitterMismatchBoxplot.m`。
+
+箱线样式参数的作用如下，均位于 `cfg.plot.exp02Box`：
+
+| 参数 | 控制内容 |
+| --- | --- |
+| `whiskerLineWidth` | 须的竖线和上下端帽的线宽，两者目前共用，单位为磅 |
+| `capWidthRatio` | 上下端帽长度相对于箱体宽度的比例 |
+| `boxLineWidth` | 箱体边框的线宽，单位为磅 |
+| `boxWidthRatio` | 箱体宽度相对于最小扫描间隔的比例 |
+| `medianLineWidth` | 箱内中位线的线宽，单位为磅 |
+
+实际箱宽 = 最小扫描间隔 × `boxWidthRatio`；实际端帽长度 = 实际箱宽 ×
+`capWidthRatio`。因此调整箱宽也会连带改变端帽长度。须的竖直长度由
+数据及IQR规则决定；`whiskerIqrMultiplier` 会改变须的统计范围和离群点
+分类，不是单纯的美观参数，不建议为外观随意调整。
 
 实验2的方法组合由 `cfg.experiments.exp02MethodNames` 单独控制，可从
 `oracle`、`frozen`、`scm`、`dl`、`incm_integral_processed` 和 `temporal` 中选择任意
