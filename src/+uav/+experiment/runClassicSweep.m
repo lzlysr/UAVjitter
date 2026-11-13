@@ -38,9 +38,9 @@ switch string(scanKind)
     otherwise
         error('uav:experiment:InvalidClassicScan', '扫描类型必须为jitter、snapshots或snr。');
 end
-if cfg.derived.arrayType == "ULA" && ~any(methodNames=="wco")
+if ~any(methodNames=="wco")
     % 经典INCM都接标准MVDR；未选择WCO时不应被其不可行半径阻断。
-    % 不改变配置半径；若选择WCO，则由统一标定入口使用显式ULA半径配置。
+    % UPA与ULA采用相同门控，不改变配置半径；选择WCO时仍调用原标定。
     calibration=struct('epsilonS',cfg.beamforming.epsilonS, ...
         'scope',"未选择WCO，标准MVDR对照不需要鲁棒半径标定");
 else

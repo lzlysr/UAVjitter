@@ -49,11 +49,15 @@ WCO不确定集半径在扫描前固定，不能在每个抖动点使用真值�
 不自动加入`run_all`。支持当前UPA与沿x轴ULA。
 
 - 扫描：`cfg.experiments.snrSweepDb=-10:5:30`，单位dB。
-- 固定条件：`classicSnrSnapshotCount=32`、`classicSnrJitterStdDeg=[5,5,5]`。
+- 固定条件：`classicSnrSnapshotCount=96`（当前暂设值）、`classicSnrJitterStdDeg=[5,5,5]`。
+  当前9×9阵列有81个阵元，96快拍满足原始Rec要求SCM可逆的必要条件
+  `L>=M`，但仍执行原方法的数值可逆性检查，不自动增加加载。
   RMS表示各轴稳态标准差，不是固定姿态角，也不是三轴合成RMS。
   这两个字段覆盖本实验内部的`timeline.L`和`attitude.stdDeg`，不修改调用者配置。
 - 干扰INR、噪声功率、名义姿态、世界方向及算法参数保持不变；只按输入SNR
-  更新期望功率。WCO半径只在扫描开始前固定标定一次。
+  更新期望功率。实验6/7/8只有选择WCO时才在扫描开始前固定标定一次
+  半径；未选择WCO时，UPA和ULA都跳过标定并保留配置半径。选择WCO
+  后的标定策略及可行性检查不变。
 - 工作量：`monteCarlo.nTrials`与`periodCounts.snrSweep`共同决定实际样本数；
   后者默认使用profile中的`sweepPeriods`。
 - 每个点内所有方法共享观测；不同点按现有子流规则使用不同随机实现。

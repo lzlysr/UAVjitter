@@ -12,7 +12,7 @@ classdef TestClassicSnrSweep < matlab.unittest.TestCase
         function defaultsAndValidation(testCase)
             cfg=config("smoke");
             testCase.verifyEqual(cfg.experiments.snrSweepDb,-10:5:30);
-            testCase.verifyEqual(cfg.experiments.classicSnrSnapshotCount,32);
+            testCase.verifyEqual(cfg.experiments.classicSnrSnapshotCount,96);
             testCase.verifyEqual(cfg.experiments.classicSnrJitterStdDeg,[5,5,5]);
             cfg.experiments.classicSnrMethodNames=["oracle","CovFit"];
             checked=uav.config.validate(cfg);
@@ -55,7 +55,7 @@ classdef TestClassicSnrSweep < matlab.unittest.TestCase
                 cfg.output.logDir=fullfile(folder.Folder,'logs');
                 r=exp08_classic_method_snr_sweep(cfg);
                 testCase.verifyEqual(r.status,"complete");
-                testCase.verifyEqual(r.cfg.timeline.L,32);
+                testCase.verifyEqual(r.cfg.timeline.L,96);
                 testCase.verifyEqual(r.cfg.attitude.stdDeg,[5,5,5]);
                 testCase.verifyEqual(cfg.timeline.L,8);
                 testCase.verifyEqual(cfg.attitude.stdDeg,[2,3,4]);
