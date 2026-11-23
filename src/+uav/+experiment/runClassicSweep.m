@@ -59,8 +59,14 @@ trialCount = cfg.monteCarlo.nTrials;
 methodCount = numel(methodNames);
 raw = allocateRaw(trialCount, periodCount, pointCount, methodCount);
 seeds = cell(1, pointCount);
-
-for pointIndex = 1:pointCount
+pointResults = cell(1, pointCount);
+workerCount = 0;
+if exist('gcp','file') == 2
+    pool = gcp('nocreate');
+    if ~isempty(pool), workerCount = pool.NumWorkers; end
+end
+% 每个扫描点独立。只复用调用者已开启的并行池，默认顺序执行。
+parfor (pointIndex = 1:pointCount, workerCount)
     pointCfg = cfg;
     switch string(scanKind)
         case "jitter"
@@ -74,20 +80,44 @@ for pointIndex = 1:pointCount
     pointCfg = uav.config.validate(pointCfg);
     % WCO半径由实验开始前的固定设计分布标定，扫描时不使用当前真值重算。
     pointCfg.beamforming.epsilonS = cfg.beamforming.epsilonS;
-    [pointRaw, seeds{pointIndex}] = uav.experiment.collectClassicMethods( ...
+    [pointResults{pointIndex}, seeds{pointIndex}] = uav.experiment.collectClassicMethods( ...
         pointCfg, experimentIndex, pointIndex, periodCount, methodNames);
-    raw = assignPoint(raw, pointRaw, pointIndex);
     fprintf('%s：扫描点 %d/%d 完成（%g）\n', experimentName, ...
         pointIndex, pointCount, scanPoints(pointIndex));
 end
 
+for pointIndex = 1:pointCount
+    raw = assignPoint(raw, pointResults{pointIndex}, pointIndex);
+end
+
+% 仅在两种细化方法同时入选时导出同一批观测上的差值及置信区间。
+[hasPair, pairedIndices] = ismember( ...
+    ["incm_covfit_refined","incm_covfit_refined_temporal"], methodNames);
+if ~all(hasPair), pairedIndices = []; end
 sinrSummary = uav.experiment.summarizePoints( ...
-    raw.sinrLinear, cfg, experimentIndex);
+    raw.sinrLinear, cfg, experimentIndex, pairedIndices);
 gainSummary = uav.experiment.summarizeFinitePoints(raw.desiredGain, cfg);
 leakageSummary = uav.experiment.summarizeFinitePoints( ...
     raw.interferenceLeakage, cfg);
 summaryTable = classicSweepTable(scanPoints, methodNames, ...
     sinrSummary, gainSummary, leakageSummary, pointVariable);
+if ~isempty(pairedIndices)
+    differences = nan(pointCount,methodCount,3);
+    differences(:,pairedIndices(2),:) = reshape([sinrSummary.pairedDifferenceDb, ...
+        sinrSummary.pairedDifferenceCi95Db],pointCount,1,3);
+    summaryTable.pairedMedianSinrDeltaDb = reshape(differences(:,:,1),[],1);
+    summaryTable.pairedDeltaCi95LowDb = reshape(differences(:,:,2),[],1);
+    summaryTable.pairedDeltaCi95HighDb = reshape(differences(:,:,3),[],1);
+end
+subspace = "incm_covfit_refined_temporal";
+capon = "incm_covfit_refined_temporal_capon";
+hybrid = "incm_covfit_refined_temporal_hybrid";
+[summaryTable,sinrSummary] = appendComparison(summaryTable,sinrSummary, ...
+    raw.sinrLinear,cfg,experimentIndex,methodNames,[subspace,capon],"caponVsSubspace");
+[summaryTable,sinrSummary] = appendComparison(summaryTable,sinrSummary, ...
+    raw.sinrLinear,cfg,experimentIndex,methodNames,[subspace,hybrid],"hybridVsSubspace");
+[summaryTable,sinrSummary] = appendComparison(summaryTable,sinrSummary, ...
+    raw.sinrLinear,cfg,experimentIndex,methodNames,[capon,hybrid],"hybridVsCapon");
 summaryTable.validCount = sinrSummary.validCounts(:);
 summaryTable.notApplicableCount = reshape(sum(sum(raw.methodStatus=="not-applicable",1),2),[],1);
 reasons = strings(pointCount,methodCount);
@@ -142,6 +172,25 @@ result = uav.experiment.finalize(result, summaryTable, fig, cfg, ...
     actualCounts, experimentTimer);
 end
 
+function [summaryTable,sinrSummary] = appendComparison(summaryTable,sinrSummary, ...
+        values,cfg,experimentIndex,methodNames,pair,prefix)
+% 两条方法曲线用同一组试次重采样，并将差值写在被比较方法的行上。
+[found,indices] = ismember(pair,methodNames);
+if ~all(found)
+    return;
+end
+comparison = uav.experiment.summarizePoints(values(:,:,:,indices),cfg,experimentIndex,[1,2]);
+pointCount = size(values,3);
+differences = nan(pointCount,numel(methodNames),3);
+differences(:,indices(2),:) = reshape([comparison.pairedDifferenceDb, ...
+    comparison.pairedDifferenceCi95Db],pointCount,1,3);
+summaryTable.(prefix+"MedianDeltaDb") = reshape(differences(:,:,1),[],1);
+summaryTable.(prefix+"Ci95LowDb") = reshape(differences(:,:,2),[],1);
+summaryTable.(prefix+"Ci95HighDb") = reshape(differences(:,:,3),[],1);
+sinrSummary.(prefix+"DeltaDb") = comparison.pairedDifferenceDb;
+sinrSummary.(prefix+"Ci95Db") = comparison.pairedDifferenceCi95Db;
+end
+
 function raw = allocateRaw(trials, periods, points, methods)
 fields = {'sinrLinear', 'desiredGain', 'interferenceLeakage', 'runtimeSec'};
 for index = 1:numel(fields)
@@ -174,11 +223,12 @@ function [lineStyle, marker] = classicMethodStyle(name)
 %CLASSICMETHODSTYLE 为每种经典方法返回固定且互不重复的绘图样式。
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
     "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_integral_processed", "incm_covfit_refined", "incm_integral_origin", ...
-    "incm_capon_point","incm_urglq"];
+    "incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+    "incm_covfit_refined_temporal_hybrid"];
 lineStyles = ["--", "-", "--", "-.", "-.", "-", "--", "-.", ...
-    ":", "-", "--", "-.", ":", "--", ":", "-."];
+    ":", "-", "--", "-.", ":", "--", ":", "-.", "-", "--", "-"];
 markers = ["none", "o", "s", "^", "v", "d", "x", "+", "p", ...
-    "h", "*", "s", ">", "<", "o", "d"];
+    "h", "*", "s", ">", "<", "o", "d", "v", "d", "^"];
 [found, location] = ismember(string(name), catalogNames);
 if ~found
     error('uav:experiment:InvalidClassicMethodSelection', ...
@@ -191,11 +241,13 @@ end
 function labels = classicMethodLabels(names)
 catalogNames = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
     "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_integral_processed", "incm_covfit_refined", "incm_integral_origin", ...
-    "incm_capon_point","incm_urglq"];
+    "incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+    "incm_covfit_refined_temporal_hybrid"];
 catalogLabels = ["理想上界", "NSB", "冻结初始MVDR", "MVDR", ...
     "NLMS", "RLS", "PI", "DL", "ESP", "WCO", ...
     "incm_covfit", "incm_integral_processed", "incm_covfit_refined", "incm_integral_origin", ...
-    "incm_capon_point","incm_urglq"];
+    "incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+    "incm_covfit_refined_temporal_hybrid"];
 [found, locations] = ismember(names, catalogNames);
 if ~all(found)
     error('uav:experiment:InvalidClassicMethodSelection', ...

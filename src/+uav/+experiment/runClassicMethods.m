@@ -28,8 +28,12 @@ diagnostics = cell(1, methodCount);
 methodStatus = repmat("ok",1,methodCount);
 notApplicableReason = strings(1,methodCount);
 
+% 两种细化方法共享同一单周期解。计时仍给每种方法计入完整的细化耗时。
+refinedIncm = [];
+refinedTime = 0;
 for methodIndex = 1:methodCount
     methodTimer = tic;
+    reusedTime = 0;
     method = methodNames(methodIndex);
     estimatedIncm = [];
     switch method
@@ -114,14 +118,36 @@ for methodIndex = 1:methodCount
             methodDiagnostics = struct( ...
                 'reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
-        case {"incm_covfit", "incm_covfit_refined"}
+        case {"incm_covfit", "incm_covfit_refined", "incm_covfit_refined_temporal", ...
+                "incm_covfit_refined_temporal_capon", "incm_covfit_refined_temporal_hybrid"}
             % 两种重构接同一名义导向与标准MVDR；不叠加鲁棒权值增益。
             if method=="incm_covfit"
                 [estimatedIncm, reconstructionDiagnostics] = ...
                     uav.incm.upaCovfit(safeObservation, cfg);
             else
-                [estimatedIncm,reconstructionDiagnostics]= ...
-                    uav.incm.localCovfit(safeObservation,cfg);
+                if isempty(refinedIncm)
+                    refinementTimer = tic;
+                    [refinedIncm,refinedDiagnostics] = uav.incm.localCovfit(safeObservation,cfg);
+                    refinedTime = toc(refinementTimer);
+                else
+                    reusedTime = refinedTime;
+                end
+                if method=="incm_covfit_refined"
+                    estimatedIncm = refinedIncm;
+                    reconstructionDiagnostics = refinedDiagnostics;
+                else
+                    switch method
+                        case "incm_covfit_refined_temporal_capon"
+                            stateField = 'temporalCaponCovfit';
+                        case "incm_covfit_refined_temporal_hybrid"
+                            stateField = 'temporalHybridCovfit';
+                        otherwise
+                            stateField = 'temporalCovfit';
+                    end
+                    [estimatedIncm,state.(stateField),reconstructionDiagnostics] = ...
+                        uav.incm.temporalCovfit(safeObservation,state.(stateField),cfg, ...
+                        refinedIncm,refinedDiagnostics,method);
+                end
             end
             reconstructionDiagnostics.method = method;
             [weight, beamformingDiagnostics] = uav.beamforming.solve( ...
@@ -130,7 +156,7 @@ for methodIndex = 1:methodCount
                 'reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
     end
-    runtimeSec(methodIndex) = toc(methodTimer);
+    runtimeSec(methodIndex) = toc(methodTimer) + reusedTime;
     metricTruth = obs.truth;
     if ~isempty(estimatedIncm)
         metricTruth.estimatedIncm = estimatedIncm;
@@ -168,7 +194,8 @@ end
 
 function state = initializeState(priorState)
 if isempty(priorState)
-    state = struct('frozenWeight', [], 'nlms', [], 'rls', []);
+    state = struct('frozenWeight', [], 'nlms', [], 'rls', [], 'temporalCovfit', [], ...
+        'temporalCaponCovfit', [], 'temporalHybridCovfit', []);
     return;
 end
 required = {'frozenWeight', 'nlms', 'rls'};
@@ -177,12 +204,16 @@ if ~isstruct(priorState) || ~all(isfield(priorState, required))
         'Classic state must preserve frozen-MVDR, NLMS, and RLS states.');
 end
 state = priorState;
+if ~isfield(state,'temporalCovfit'), state.temporalCovfit = []; end
+if ~isfield(state,'temporalCaponCovfit'), state.temporalCaponCovfit = []; end
+if ~isfield(state,'temporalHybridCovfit'), state.temporalHybridCovfit = []; end
 end
 
 function validateMethodSelection(methodNames)
 allowed = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
     "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin", ...
-    "incm_capon_point","incm_urglq"];
+    "incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+    "incm_covfit_refined_temporal_hybrid"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowed))

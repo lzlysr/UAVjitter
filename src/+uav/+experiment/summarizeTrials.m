@@ -1,4 +1,4 @@
-function summary = summarizeTrials(values, cfg, bootstrapSubstream)
+function summary = summarizeTrials(values, cfg, bootstrapSubstream, comparedMethods)
 %SUMMARIZETRIALS 使用配对“试次簇”bootstrap汇总动态实验数据。
 %   values维度为[试次×周期×方法]。同一试次内的周期来自同一姿态轨迹，
 %   不能当成独立样本，因此重采样完整试次，并保留该试次的全部周期。
@@ -44,6 +44,13 @@ for group = 1:groupCount
     end
 end
 summary.ci95Db = linearToDb(summary.ci95Linear);
+if nargin >= 4 && ~isempty(comparedMethods)
+    % 两方法的中位数差使用同一组重采样试次，保留时间相关和方法配对。
+    differences = diff(linearToDb(bootstrapMedians(:,comparedMethods)),1,2);
+    summary.pairedDifferenceDb = diff(summary.medianDb(comparedMethods));
+    summary.pairedDifferenceCi95Db = quantile(differences, ...
+        cfg.experiments.aggregation.confidenceQuantiles).';
+end
 summary.bootstrapSubstream = bootstrapSubstream;
 summary.bootstrapUnit = "trial";
 summary.independentTrialCount = trialCount;

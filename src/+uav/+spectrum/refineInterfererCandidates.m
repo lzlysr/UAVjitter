@@ -1,8 +1,9 @@
-function [A,nodes,d] = refineInterfererCandidates(obs, nodes, D, cfg)
+function [A,nodes,d] = refineInterfererCandidates(obs, nodes, D, cfg, fullVisibleDomain)
 %REFINEINTERFERERCANDIDATES 观测驱动局部Capon峰的亚网格细化，不校正期望参考。
 %   低加载与峰细化分别作为显式消融，不冒充Lin的BCS或Taylor原算法。
 %   nodes和D由两种CovFit共用前端给出，不在细化分支重新筛选候选。
-%   仅优化期望区外的干扰节点；候选数量不读取真实J，期望字典保持不变。
+%   默认仅优化期望区外的干扰节点；全域模式保留可见圆盘约束供后续关联。
+if nargin < 5, fullVisibleDomain = false; end
 if isfield(cfg.derived,'arrayType') && cfg.derived.arrayType == "ULA"
     [A,nodes,d] = uav.spectrum.refineUlaCandidates(obs,nodes,D,cfg);
     return;
@@ -30,6 +31,11 @@ for q=D+1:size(nodes,1)
     [value,score,flag]=fmincon(@objective,seed,[],[],[],[], ...
         max(seed-radius,-1),min(seed+radius,1),@constraints,options);
     c=constraints(value);
+    if fullVisibleDomain && c > 0 && c <= settings.feasibilityTolerance
+        % 将求解容差内轻微超出圆盘的节点投回边界。
+        value = value / norm(value);
+        score = objective(value);
+    end
     exitflags(q-D)=flag;
     if flag>0 && all(c<=settings.feasibilityTolerance) && score<=objective(seed)
         nodes(q,:)=value.';accepted=accepted+1;
@@ -47,7 +53,11 @@ d=struct('desiredCount',D,'acceptedCount',accepted,'usedTruth',false, ...
         gradient=2*real(da'*z);
     end
     function [c,ceq]=constraints(xi)
-        lowerZ=-sqrt(max(0,1-sum(xi.^2)));
-        c=[sum(xi.^2)-1;reference'*[xi;lowerZ]-cosineLimit];ceq=[];
+        c=sum(xi.^2)-1;
+        if ~fullVisibleDomain
+            lowerZ=-sqrt(max(0,-c));
+            c=[c;reference'*[xi;lowerZ]-cosineLimit];
+        end
+        ceq=[];
     end
 end

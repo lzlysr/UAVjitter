@@ -1,6 +1,6 @@
 function [RinHat, nextState, diagnostics] = reconstruct(method, obs, priorState, cfg)
 %RECONSTRUCT 静态及时序INCM重构的统一入口。
-%   method     - 六种incm_*名称或temporal；历史名称由统一映射兼容；
+%   method     - 各incm_*重构名称或temporal；历史名称由统一映射兼容；
 %   obs        - 非Oracle白名单观测，至少含M×M样本协方差Rx；
 %   priorState - 上一周期的估计谱与对齐诊断，静态方法可传[]；
 %   RinHat     - M×M重构干扰加噪声协方差；
@@ -35,6 +35,9 @@ switch method
             [RinHat,diagnostics]=uav.incm.localCovfit(obs,cfg);
         end
         nextState=struct('method',method);
+    case {"incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+            "incm_covfit_refined_temporal_hybrid"}
+        [RinHat,nextState,diagnostics] = uav.incm.temporalCovfit(obs,priorState,cfg,[],[],method);
     case "incm_integral_origin"
         % 原论文ULA采用dtheta；UPA是同一原式在现有二维测度下的迁移，
         % 不是论文原始阵列实验。禁止加载、扣底、显式加噪声或结构修复。

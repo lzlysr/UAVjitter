@@ -1,9 +1,10 @@
 function [powers, diagnostics] = fitNonnegativePowers( ...
-        Rx, candidateManifold, noisePower, lambdaFit)
+        Rx, candidateManifold, noisePower, lambdaFit, continuity, previous)
 %FITNONNEGATIVEPOWERS 以非负Hermitian协方差拟合估计候选方向功率。
 %   每个字典列对应a_q*a_q^H。矩阵经保Frobenius范数的实值
 %   Hermitian向量化后，用带L2正则项的非负最小二乘估计候选功率。
-%   本函数只使用样本协方差、候选流形和配置噪声，不读取任何真值。
+%   可选时序项逐列给定非负权重和历史目标；零权重保留原始拟合。
+%   本函数只使用观测、候选流形、噪声估计和算法历史，不读取真值。
 
 validateInputs(Rx, candidateManifold, noisePower, lambdaFit);
 M = size(Rx, 1);
@@ -24,6 +25,11 @@ end
 % 增广形式同时实现L2正则化和候选功率非负约束。
 augmentedDictionary = [dictionary; sqrt(lambdaFit) * eye(Q)];
 augmentedTarget = [target; zeros(Q, 1)];
+if nargin >= 5 && any(continuity > 0)
+    root = sqrt(continuity(:));
+    augmentedDictionary = [augmentedDictionary; diag(root)];
+    augmentedTarget = [augmentedTarget; root .* previous(:)];
+end
 powers = lsqnonneg(augmentedDictionary, augmentedTarget);
 
 fitResidual = target - dictionary * powers;

@@ -1,7 +1,8 @@
-function [A, desiredCount, nodes, diagnostics] = localPeakCandidates(Rx, original, cfg)
+function [A, desiredCount, nodes, diagnostics] = localPeakCandidates(Rx, original, cfg, fullVisibleDomain)
 %LOCALPEAKCANDIDATES 提取干扰局部极大值，而不是最强相邻网格单元。
 %   期望字典沿用原CovFit；最终波束参考始终由实验层固定为名义导向。
 %   不使用真实干扰数或方向；阈值、上限、加载沿用原配置。
+if nargin < 4, fullVisibleDomain = false; end
 local = cfg;
 local.spectrum.diagonalLoading=cfg.incm.staticCovfit.loadingRatio;
 local.spectrum.peakThresholdRatio=cfg.incm.staticCovfit.peakThresholdRatio;
@@ -20,9 +21,12 @@ for dr=-1:1
         isPeak=isPeak & map>=neighbor;
     end
 end
-allNodes=[s.xiX(:),s.xiY(:)];
-outside=reshape(uav.spectrum.admissibleDirections(allNodes,cfg),size(map));
-[interferers,selection] = uav.spectrum.selectPeaks(power,s,isPeak & outside,local);
+if ~fullVisibleDomain
+    allNodes=[s.xiX(:),s.xiY(:)];
+    outside=reshape(uav.spectrum.admissibleDirections(allNodes,cfg),size(map));
+    isPeak = isPeak & outside;
+end
+[interferers,selection] = uav.spectrum.selectPeaks(power,s,isPeak,local);
 cap=min(cfg.incm.staticCovfit.maximumCandidateCount,cfg.derived.M-1);
 interferers=interferers(1:min(size(interferers,1),cap),:);
 desired=original.desiredCandidateNodes;

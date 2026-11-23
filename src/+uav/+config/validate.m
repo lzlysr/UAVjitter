@@ -425,6 +425,25 @@ if isfield(cfg.incm,'localCovfit')
     end
     validateAlgorithmIntegerScalar(local.solver.maxIterations,'incm.localCovfit.solver.maxIterations',true);
 end
+if isfield(cfg.incm,'temporalCovfit')
+    temporal = cfg.incm.temporalCovfit;
+    fields = {'associationDistance','mergeDistance','minimumModeToNoise', ...
+        'minimumTrackPowerRatio','maximumPowerRatio','modeRefinementIterations','powerContinuityWeight'};
+    if ~isstruct(temporal) || ~all(isfield(temporal,fields))
+        error('uav:config:InvalidAlgorithmParameter','incm.temporalCovfit配置字段不完整。');
+    end
+    validatePositiveFiniteScalar(temporal.associationDistance,'incm.temporalCovfit.associationDistance');
+    validatePositiveFiniteScalar(temporal.mergeDistance,'incm.temporalCovfit.mergeDistance');
+    validatePositiveFiniteScalar(temporal.minimumModeToNoise,'incm.temporalCovfit.minimumModeToNoise');
+    validateUnitIntervalScalar(temporal.minimumTrackPowerRatio,'incm.temporalCovfit.minimumTrackPowerRatio',true);
+    validatePositiveFiniteScalar(temporal.maximumPowerRatio,'incm.temporalCovfit.maximumPowerRatio');
+    if temporal.maximumPowerRatio < 1 || temporal.mergeDistance > temporal.associationDistance
+        error('uav:config:InvalidAlgorithmParameter','时序CovFit的功率比或方向关联门限不一致。');
+    end
+    validateAlgorithmIntegerScalar(temporal.modeRefinementIterations, ...
+        'incm.temporalCovfit.modeRefinementIterations',false);
+    validateNonnegativeFiniteScalar(temporal.powerContinuityWeight,'incm.temporalCovfit.powerContinuityWeight');
+end
 validateNonnegativeFiniteScalar(cfg.beamforming.diagonalLoading, ...
     'beamforming.diagonalLoading');
 validateNonnegativeFiniteScalar(cfg.beamforming.epsilonS, 'beamforming.epsilonS');
@@ -559,7 +578,8 @@ allowedExp02Methods = expectedMethods;
 allowedClassicMethods = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", ...
     "nlms", "rls", "pi", "dl_mvdr", "esp", "wco", ...
     "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin", ...
-    "incm_capon_point","incm_urglq"];
+    "incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+    "incm_covfit_refined_temporal_hybrid"];
 expectedAblations = ["full", "lambda_t_zero", "identity_alignment", ...
     "uniform_quadrature", "no_structure", "pilot_projection"];
 if ~isstring(cfg.experiments.methodNames) || ...
@@ -589,17 +609,19 @@ selectedClassicMethods=[classicMethods,reshape(cfg.experiments.classicSnapshotMe
 if isfield(cfg.experiments,'classicSnrMethodNames')
     selectedClassicMethods=[selectedClassicMethods,reshape(cfg.experiments.classicSnrMethodNames,1,[])];
 end
-if any(ismember(selectedClassicMethods,["incm_covfit","incm_covfit_refined"])) && ...
+if any(ismember(selectedClassicMethods,["incm_covfit","incm_covfit_refined","incm_covfit_refined_temporal", ...
+        "incm_covfit_refined_temporal_capon","incm_covfit_refined_temporal_hybrid"])) && ...
         ~isfield(cfg.incm,'localCovfit')
     experimentError('选择任一种CovFit时必须提供共用incm.localCovfit配置。');
 end
-newMethods=["incm_capon_point","incm_urglq"];
-if any(ismember(selectedClassicMethods,newMethods)) && ...
+newMethods=["incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
+    "incm_covfit_refined_temporal_hybrid"];
+if any(ismember(selectedClassicMethods,newMethods(1:2))) && ...
         ~all(isfield(cfg.incm,{'caponCandidates','localCovfit'}))
     experimentError('新增Capon方法需要caponCandidates配置及共用候选/噪声前端配置。');
 end
 for index=1:numel(newMethods)
-    fields={"caponPoint","urglq"};
+    fields={"caponPoint","urglq","temporalCovfit","temporalCovfit","temporalCovfit"};
     if any(selectedClassicMethods==newMethods(index)) && ~isfield(cfg.incm,fields{index})
         experimentError('所选新增方法缺少相应incm参数。');
     end
