@@ -2,16 +2,23 @@
 
 ## 方法入口和信息流
 
-`incm_covfit_refined_temporal` 是实验 6、7、8 可选的 INCM 重构方法。
-每周期先得到原 `incm_covfit_refined` 的连续方向细化结果和联合非负拟合结果。
-两种方法一起运行时复用该计算，运行时间仍分别计入完整的单周期计算成本。
+实验 6、7、8 共用三种保留区内身份修正的时序 CovFit。
 
-新方法的状态只包含上一周期已估计的有效干扰方向余弦和拟合功率。
-每个蒙特卡洛试次重新初始化。首周期、无历史或没有通过关联时，
-直接用当前周期的细化 CovFit。关联成功并完成非负拟合时，直接输出时序 INCM。
-ULA 沿用单周期细化 CovFit，本次验证针对 UPA。最终权值采用与基线相同的名义期望
-导向和标准 MVDR。时序重构使用当前 SCM、阵列配置及上一周期的干扰状态，
-真实姿态、来向、INCM 及干扰数用于场景生成或指标计算。
+| 当前方法标识 | 首周期及关联失败时的重构底座 | 当期时序候选 |
+| --- | --- | --- |
+| `incm_covfit_refined_temporal`（默认） | 细化 Capon-CovFit | 可见域内外统一用全域 Capon 找峰和连续细化 |
+| `incm_covfit_refined_temporal_capon_base` | 细化 Capon-CovFit | 二维子空间 |
+| `incm_covfit_refined_temporal_pure_subspace` | 当期子空间方向＋非负 CovFit | 复用底座从当期 SCM 提取的全域子空间候选 |
+
+三种方法分别保存上一周期的有效干扰方向、拟合功率和区外确认标记，每个试次由空状态
+起步。同周期关联成功后重新拟合 INCM。纯子空间版用名义方向与区内最接近名义方向
+的子空间候选解释期望成分，用区外候选初始化干扰组。另两种方法共用 Capon 底座，
+按原逻辑使用名义方向与区内最强 Capon 网格点解释期望。沿用统一的估噪、非负功率拟合、
+固定名义期望导向和标准 MVDR。真实姿态、来向及 INCM 仅用于仿真和评价。
+
+纯子空间版要求两轴均有相邻阵元。沿 x 轴的 ULA 采用原单周期 Capon-CovFit 路径。
+下面早期实验中的旧标识 `incm_covfit_refined_temporal` 对应现名
+`incm_covfit_refined_temporal_capon_base`。旧 `_capon` 和 `_hybrid` 保留各自的历史定义。
 
 ## 每周期方向更新和跨周期关联
 
@@ -19,7 +26,7 @@ ULA 沿用单周期细化 CovFit，本次验证针对 UPA。最终权值采用�
 功率连续性采用已经匹配的历史系数，而导向矢量始终由当前周期的方向重算。
 这样不会直接平均两个指向不同方向的 INCM，也不会把过去的点硬放到本周期的同一网格上。
 
-设 $\mathbf U_k$ 是从当前 SCM 中抽出的显著特征子空间。
+子空间前端以当前 SCM 的显著特征子空间 $\mathbf U_k$ 为起点。
 对 UPA 的 $x$、$y$ 两轴分别选择相邻的等形子阵，构造
 
 $$
@@ -43,8 +50,25 @@ $$
 其中 $\ell_j$ 为对应 SCM 特征值。候选数由相对于估计噪声的特征值门限和子阵维数决定。
 若当前方向候选与上一周期的某个干扰在方向余弦距离和候选功率比上均相容，
 就按距离做一对一关联。关联成功的干扰用当前方向替代旧位置。
-与期望拟合字典太接近的候选不纳入干扰组。较强且尚未被关联结果覆盖的当前
-CovFit 候选可以进入干扰组，使新出现的干扰仍能被纳入拟合。
+匹配候选过于靠近期望拟合字典时，先检查冲突对象。与固定名义候选冲突时仍采用保守规则；
+与临时区内候选冲突时，表中的三种方法均允许已在区外确认的干扰轨迹纠正其身份。
+较强且尚未被关联结果覆盖的当前 CovFit 候选可以进入干扰组，使新出现的干扰仍能被纳入拟合。
+
+### 区内冲突与轨迹延续
+
+本期临时的期望拟合节点来自 Capon 区内峰或子空间候选。若该节点与唯一一个通过方向
+距离和功率比匹配的候选冲突，且该候选的轨迹曾在区外作为可靠干扰保留下来，就从期望拟合
+字典移走临时节点，并保留本期匹配候选作为干扰。双重归类由此消除。
+与名义节点冲突或多候选争夺同一个临时峰时，仍采用保守的期望保护规则。
+
+状态新增 `confirmedOutside`，与保留的干扰来向和拟合功率一一对应。成功匹配时，区外确认
+标记可以沿轨迹连续传到区内。因此连续多期留在期望区也可以继续关联。当期未匹配或拟合功率
+低于保留门限时，轨迹可能断开；从首周期就在区内的干扰也缺少区外确认，仍由原有底座处理。
+
+`cfg.incm.temporalCovfit.resolveDesiredPeakConflict` 在新配置中默认为 `true`。
+设为 `false` 时使用原规则。没有这个字段的历史配置按原规则重放。
+此开关应用于表中的三种方法。最终 MVDR 继续使用固定名义期望导向。
+下文历史实验记录采用修改前的规则，单独保留供对照。
 
 ## 联合拟合与 INCM
 
@@ -146,7 +170,7 @@ bootstrap 重采样单位，每个子样本分别计算两种方法的中位 SIN
 Capon 谱选择局部峰，再按连续 Capon 目标细化。期望排除区内外的峰均可被提名。
 细化只受可见圆盘和粗网格峰附近的搜索范围限制。候选的干扰身份在此之后判定。
 
-子空间版 `incm_covfit_refined_temporal` 继续用两轴子阵的平移不变性提取候选。
+当时的子空间版（现名 `incm_covfit_refined_temporal_capon_base`）用两轴子阵的平移不变性提取候选。
 两条链路共用候选关联功率的双边最小二乘公式、距离和功率比匹配、期望候选的
 近邻排除、联合功率拟合与标准 MVDR。它们各自维护上周期状态。Capon 谱峰高度
 用于前端筛选，最终 INCM 中的系数来自联合协方差拟合。
@@ -162,7 +186,8 @@ Capon 谱选择局部峰，再按连续 Capon 目标细化。期望排除区内�
 ~~~matlab
 startup
 cfg = config("preliminary");
-methods = ["oracle", "incm_covfit_refined", "incm_covfit_refined_temporal", ...
+cfg.incm.temporalCovfit.resolveDesiredPeakConflict = false;
+methods = ["oracle", "incm_covfit_refined", "incm_covfit_refined_temporal_capon_base", ...
     "incm_covfit_refined_temporal_capon"];
 cfg.experiments.classicJitterMethodNames = methods;
 cfg.experiments.classicSnapshotMethodNames = methods;
@@ -263,3 +288,29 @@ CSV 的 `hybridVsSubspaceMedianDeltaDb` 和 `hybridVsCaponMedianDeltaDb`
 16.702、16.381、16.402 dB。混合版相较子空间版的配对差值为 −0.300 dB，
 95% 区间为 [−0.796, −0.117] dB。相比全域 Capon，混合版在该点的点估计
 提高 0.021 dB，95% 区间下限约为 0。
+
+## 区内冲突修正的改前／改后对照
+
+本节结果比较子空间时序＋Capon 底座（当前标识 `incm_covfit_refined_temporal_capon_base`）修正前后的表现。
+
+采用 3×3 UPA 的完整 `preliminary` 配置，每点 50 个试次、每试次 50 个周期。改前值来自保存的原始 MAT，改后重跑同一批快拍。对三个实验逐点核对了物理参数、算法共用参数、随机子流、快拍签名和 Oracle 输出。另用关闭开关的代码重放了 20° 点的前 5 个完整试次，逐周期输出与旧 MAT 一致。
+
+下表为修改后减去修改前，差值单位为 dB。中位数计数依次为增加、持平、下降。配对区间按完整试次重采样，未做多扫描点校正。
+
+| 扫描 | 中位数增／平／降 | 中位数差值范围 | 第 5 百分位差值范围 |
+| --- | ---: | ---: | ---: |
+| 实验 6，抖动 RMS 0–20° | 16／5／0 | 0 至 +0.7113 | 0 至 +36.5755 |
+| 实验 7，32–1024 快拍 | 21／9／2 | −0.000231 至 +0.003293 | +0.000886 至 +0.242933 |
+| 实验 8，输入 SNR −10 至 30 dB | 9／0／0 | +0.000682 至 +0.010178 | +0.047852 至 +0.287780 |
+
+实验 6 的 0–4° 点持平，5–20° 点的中位数和低分位均提高。20° 点的中位 SINR 从 16.70 升至 17.41 dB，增益 +0.71 dB，配对 95% 区间为 [0.30, 2.26] dB。第 5 百分位由 −36.18 升至 −21.90 dB，增益 +14.28 dB，按完整试次配对的 95% 区间为 [8.02, 25.75] dB。低于 0 dB 的周期比例由 30.00% 降至 9.84%。同点 Oracle 第 5 百分位是 17.73 dB，残余深衰落仍需单独研究。
+
+20° 逐周期复核以方向余弦距离 0.04 和正拟合功率为命中条件。678 次真干扰处在期望区内，保留次数由 26 增至 522。514 对相邻周期中同一路真干扰连续位于区内，修改后有 375 对在两期均保有已确认的轨迹。517 次临时峰改判均靠近真干扰，在该半径内未观察到改判点靠近真实期望方向。真值只用于事后核对。
+
+实验 7 的 384 和 960 快拍点中位数分别下降 0.000100 和 0.000231 dB，两个配对区间均含零，两个点的第 5 百分位均提高。实验 8 九个 SNR 点的中位数和第 5 百分位均提高，增量小于高抖动条件下的变化。
+
+- [实验 6 对照 CSV](../results/diagnostics/temporal_peak_conflict_preliminary/exp06_classic_method_jitter_sweep_preliminary_before_after.csv)
+- [实验 7 对照 CSV](../results/diagnostics/temporal_peak_conflict_preliminary/exp07_classic_method_snapshot_sweep_preliminary_before_after.csv)
+- [实验 8 对照 CSV](../results/diagnostics/temporal_peak_conflict_preliminary/exp08_classic_method_snr_sweep_preliminary_before_after.csv)
+- [20° 连续跟踪诊断](../results/diagnostics/temporal_peak_conflict_preliminary/jitter20_inside_tracking.csv)
+- [使用原随机子流复跑三组对照的 MATLAB 脚本](../results/diagnostics/temporal_peak_conflict_preliminary/run_temporal_peak_conflict_comparison.m)

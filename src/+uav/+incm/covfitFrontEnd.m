@@ -34,19 +34,8 @@ else
     end
 end
 snapshotCount=size(obs.X,2);
-if snapshotCount<M
-    noisePower=cfg.signal.noisePower;
-    noiseSource="configured-underdetermined";
-    noiseDiagnostics=struct('eigenvalues',zeros(0,1),'lowerEigenvalueCount',0);
-else
-    % 与原细化版一致：较小特征值的中位数估噪，不改成真值噪声。
-    eigenvalues=sort(real(eig((obs.Rx+obs.Rx')/2)),'ascend');
-    lowerCount=max(1,ceil(M*cfg.spectrum.noiseEigenvalueFraction));
-    rawEstimate=median(eigenvalues(1:lowerCount));
-    scale=max(real(trace(obs.Rx))/M,eps);
-    noisePower=max(rawEstimate,eps(scale));noiseSource="lower-eigenvalues";
-    noiseDiagnostics=struct('eigenvalues',eigenvalues,'lowerEigenvalueCount',lowerCount);
-end
+[noisePower,noiseSource,noiseDiagnostics]=uav.incm.covfitNoise( ...
+    obs.Rx,snapshotCount,cfg);
 original=struct('desiredCandidateNodes',desired,'noisePower',noisePower, ...
     'noiseSource',noiseSource,'noiseDiagnostics',noiseDiagnostics, ...
     'effectiveSnapshotCount',snapshotCount,'loading',spectrum.loading, ...

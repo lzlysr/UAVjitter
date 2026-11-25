@@ -119,11 +119,15 @@ for methodIndex = 1:methodCount
                 'reconstruction', reconstructionDiagnostics, ...
                 'beamforming', beamformingDiagnostics);
         case {"incm_covfit", "incm_covfit_refined", "incm_covfit_refined_temporal", ...
-                "incm_covfit_refined_temporal_capon", "incm_covfit_refined_temporal_hybrid"}
-            % 两种重构接同一名义导向与标准MVDR；不叠加鲁棒权值增益。
+                "incm_covfit_refined_temporal_capon","incm_covfit_refined_temporal_hybrid", ...
+                "incm_covfit_refined_temporal_capon_base","incm_covfit_refined_temporal_pure_subspace"}
+            % 各CovFit重构使用同一名义导向与标准MVDR。
             if method=="incm_covfit"
                 [estimatedIncm, reconstructionDiagnostics] = ...
                     uav.incm.upaCovfit(safeObservation, cfg);
+            elseif method=="incm_covfit_refined_temporal_pure_subspace"
+                [estimatedIncm,state.temporalPureSubspace,reconstructionDiagnostics] = ...
+                    uav.incm.temporalCovfit(safeObservation,state.temporalPureSubspace,cfg,[],[],method);
             else
                 if isempty(refinedIncm)
                     refinementTimer = tic;
@@ -141,6 +145,8 @@ for methodIndex = 1:methodCount
                             stateField = 'temporalCaponCovfit';
                         case "incm_covfit_refined_temporal_hybrid"
                             stateField = 'temporalHybridCovfit';
+                        case "incm_covfit_refined_temporal_capon_base"
+                            stateField = 'temporalSubspaceCaponBase';
                         otherwise
                             stateField = 'temporalCovfit';
                     end
@@ -195,7 +201,8 @@ end
 function state = initializeState(priorState)
 if isempty(priorState)
     state = struct('frozenWeight', [], 'nlms', [], 'rls', [], 'temporalCovfit', [], ...
-        'temporalCaponCovfit', [], 'temporalHybridCovfit', []);
+        'temporalCaponCovfit', [], 'temporalHybridCovfit', [], ...
+        'temporalSubspaceCaponBase', [], 'temporalPureSubspace', []);
     return;
 end
 required = {'frozenWeight', 'nlms', 'rls'};
@@ -207,13 +214,16 @@ state = priorState;
 if ~isfield(state,'temporalCovfit'), state.temporalCovfit = []; end
 if ~isfield(state,'temporalCaponCovfit'), state.temporalCaponCovfit = []; end
 if ~isfield(state,'temporalHybridCovfit'), state.temporalHybridCovfit = []; end
+if ~isfield(state,'temporalSubspaceCaponBase'), state.temporalSubspaceCaponBase = []; end
+if ~isfield(state,'temporalPureSubspace'), state.temporalPureSubspace = []; end
 end
 
 function validateMethodSelection(methodNames)
 allowed = ["oracle", "nsb", "frozen_mvdr", "scm_mvdr", "nlms", ...
     "rls", "pi", "dl_mvdr", "esp", "wco", "incm_covfit", "incm_covfit_refined", "incm_integral_processed", "incm_integral_origin", ...
     "incm_capon_point","incm_urglq","incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
-    "incm_covfit_refined_temporal_hybrid"];
+    "incm_covfit_refined_temporal_hybrid", ...
+    "incm_covfit_refined_temporal_capon_base","incm_covfit_refined_temporal_pure_subspace"];
 if isempty(methodNames) || any(strlength(methodNames) == 0) || ...
         numel(unique(methodNames)) ~= numel(methodNames) || ...
         any(~ismember(methodNames, allowed))

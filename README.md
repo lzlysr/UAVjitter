@@ -587,29 +587,28 @@ ULA结果名额外包含`_ULA_9x1`等阵列形状，例如
 
 ### 10.4 细化 CovFit 的时序增强
 
-实验6、7、8的方法列表支持 `incm_covfit_refined_temporal`。它先运行
-`incm_covfit_refined`，再用上一周期的干扰候选关联本周期的阵列子空间候选。
-首周期或没有通过关联时，沿用本周期的细化 CovFit。关联成功后直接用时序拟合的
-INCM 求权值，时序重构只使用阵列观测及历史干扰状态。
-时序增强面向两个维度
-均有多个阵元的 UPA。阵列退化为 ULA 时直接使用单周期细化版。
+实验 6、7、8 共用以下三种可选方法。它们使用同一套历史关联、区内身份修正与
+功率连续性拟合，最终以固定名义期望导向求标准 MVDR。
 
-同一试次内的第一帧从空状态开始。算法仅保存经观测估计的干扰候选位置和功率。
-各周期仍以固定的名义期望导向接标准 MVDR。阈值和功率连续性强度集中设在
-`cfg.incm.temporalCovfit`。参见[时序 CovFit 原理与验证](docs/temporal_covfit_refined.md)。
-全域 Capon 候选前端可用 `incm_covfit_refined_temporal_capon` 选择，见
-[两种候选前端的对照](docs/temporal_covfit_refined.md#全域-capon-与子空间前端的对照)。
-期望区内用子空间、区外用 Capon 的混合前端可选 `incm_covfit_refined_temporal_hybrid`，
-见[分区混合对照](docs/temporal_covfit_refined.md#期望区内子空间区外-capon-的混合对照)。
+| 方法标识 | 后续周期的方向候选 | 首周期或关联失败时采用的底座 |
+| --- | --- | --- |
+| `incm_covfit_refined_temporal`（默认） | 全可见域 Capon 找峰并连续细化 | 细化 Capon-CovFit |
+| `incm_covfit_refined_temporal_capon_base` | 二维子空间 | 细化 Capon-CovFit |
+| `incm_covfit_refined_temporal_pure_subspace` | 二维子空间 | 当期纯子空间 CovFit |
 
-下例使用完整 `preliminary` 工作量和原扫描点，只选择直接相关的两种方法和
-理想上界，并将输出定向到独立目录。可先在 MATLAB 中开启并行池。扫描器仅在
-池已开启时使用并行，单试次内的周期仍按时间顺序计算。
+纯子空间版支持 UPA。采用 Capon 底座的版本在 ULA 下使用单周期细化结果。
+阈值和区内身份修正开关集中设在 `cfg.incm.temporalCovfit`。此前实验的
+`incm_covfit_refined_temporal` 曲线是第二行的实现。旧的 `_capon` 和 `_hybrid`
+仍可用于早期对照，沿用其原先的身份处理规则。见[时序 CovFit 实现与历史记录](docs/temporal_covfit_refined.md)。
+
+下例使用完整 `preliminary` 工作量和原扫描点，选择理想上界与三种时序方法，并把
+输出写入独立目录。扫描器复用已开启的 MATLAB 并行池，单试次内的周期仍按时间顺序计算。
 
 ~~~matlab
 startup
 cfg = config("preliminary");
-methods = ["oracle", "incm_covfit_refined", "incm_covfit_refined_temporal"];
+methods = ["oracle", "incm_covfit_refined_temporal", ...
+    "incm_covfit_refined_temporal_capon_base", "incm_covfit_refined_temporal_pure_subspace"];
 cfg.experiments.classicJitterMethodNames = methods;
 cfg.experiments.classicSnapshotMethodNames = methods;
 cfg.experiments.classicSnrMethodNames = methods;
@@ -621,9 +620,9 @@ r7 = exp07_classic_method_snapshot_sweep(cfg);
 r8 = exp08_classic_method_snr_sweep(cfg);
 ~~~
 
-CSV 中新方法行的 `pairedMedianSinrDeltaDb` 为两条中位数曲线之差。
-`pairedDeltaCi95LowDb` 和 `pairedDeltaCi95HighDb` 是该差值的试次簇
-bootstrap 区间。MAT 中对应字段位于 `result.summary.sinr`。
+CSV 的 `fullCaponVsCaponBase*` 和 `pureSubspaceVsCaponBase*` 给出两个版本
+减去子空间时序＋Capon 底座的逐点中位 SINR 差值及配对 95% 区间。MAT 中对应字段
+位于 `result.summary.sinr`。
 
 ## 11. 结果文件
 

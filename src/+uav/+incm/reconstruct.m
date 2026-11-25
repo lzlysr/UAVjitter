@@ -36,7 +36,8 @@ switch method
         end
         nextState=struct('method',method);
     case {"incm_covfit_refined_temporal","incm_covfit_refined_temporal_capon", ...
-            "incm_covfit_refined_temporal_hybrid"}
+            "incm_covfit_refined_temporal_hybrid","incm_covfit_refined_temporal_capon_base", ...
+            "incm_covfit_refined_temporal_pure_subspace"}
         [RinHat,nextState,diagnostics] = uav.incm.temporalCovfit(obs,priorState,cfg,[],[],method);
     case "incm_integral_origin"
         % 原论文ULA采用dtheta；UPA是同一原式在现有二维测度下的迁移，
