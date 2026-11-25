@@ -23,6 +23,28 @@ classdef TestMatchedCovfit < matlab.unittest.TestCase
             testCase.verifyEqual(c.incm.staticCovfit.loadingRatio,0.002);
             testCase.verifyEqual(c.incm.staticCovfit.fitRegularization,0);
         end
+        function refinedCandidatesStayInsideVisibleDiskAtThirtyDegrees(testCase)
+            % 复现实验6在30度、第24试次第17周期触发的可见圆盘边界。
+            cfg = config("preliminary");
+            cfg.array.Nx = 3;
+            cfg.array.Ny = 3;
+            cfg.timeline.L = 32;
+            cfg.attitude.stdDeg(:) = 30;
+            cfg = uav.config.validate(cfg);
+            trial = 24;
+            period = 17;
+            scenarioSeed = uav.experiment.substream(cfg, 6, 31, trial, 0, "scenario");
+            snapshotSeed = uav.experiment.substream(cfg, 6, 31, trial, period, "snapshot");
+            scenario = uav.scenario.generate(cfg, ...
+                uav.util.makeStream(cfg.random.baseSeed, scenarioSeed));
+            obs = uav.scenario.generatePeriod(cfg, scenario, period, ...
+                uav.util.makeStream(cfg.random.baseSeed, snapshotSeed));
+
+            [incm, details] = uav.incm.localCovfit(uav.experiment.algorithmObservation(obs), cfg);
+
+            testCase.verifyTrue(all(isfinite(incm), 'all'));
+            testCase.verifyLessThanOrEqual(max(sum(details.interfererCandidateNodes.^2, 2)), 1 + 4*eps);
+        end
         function bothArraysShareCandidatesNoiseAndFit(testCase)
             for shape={[3,3],[9,1]}
                 for L=[8,32]

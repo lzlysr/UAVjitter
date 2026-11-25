@@ -31,9 +31,10 @@ for q=D+1:size(nodes,1)
     [value,score,flag]=fmincon(@objective,seed,[],[],[],[], ...
         max(seed-radius,-1),min(seed+radius,1),@constraints,options);
     c=constraints(value);
-    if fullVisibleDomain && c > 0 && c <= settings.feasibilityTolerance
-        % 将求解容差内轻微超出圆盘的节点投回边界。
+    if c(1) > 0 && c(1) <= settings.feasibilityTolerance
+        % 两种搜索域都受圆盘约束。收回轻微越界后重新核对全部约束与谱值。
         value = value / norm(value);
+        c = constraints(value);
         score = objective(value);
     end
     exitflags(q-D)=flag;
